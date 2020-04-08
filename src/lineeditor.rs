@@ -1,5 +1,3 @@
-use unicode_width;
-
 #[derive(Debug, Clone)]
 pub struct EditorState {
     content: String,
@@ -65,7 +63,18 @@ impl EditorState {
     }
 }
 
-fn next_char(s: &str, i: usize) -> usize { i + s.chars().nth(i).and_then(unicode_width::UnicodeWidthChar::width).unwrap() }
+fn next_char(s: &str, i: usize) -> usize {
+    let s = s.as_bytes();
+    if s[i] <= 0x7f {
+        i + 1
+    } else if s[i] >> 5 == 0b110 {
+        i + 2
+    } else if s[i] >> 4 == 0b1110 {
+        i + 3
+    } else {
+        i + 4
+    }
+}
 
 fn prev_char(s: &str, i: usize) -> usize {
     let s = s.as_bytes();
