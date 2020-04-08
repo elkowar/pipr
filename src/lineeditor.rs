@@ -1,3 +1,4 @@
+use unicode_segmentation::*;
 #[derive(Debug, Clone)]
 pub struct EditorState {
     content: Vec<String>,
@@ -20,6 +21,13 @@ impl EditorState {
             content: Vec::new(),
             cursor_col: 0,
         }
+    }
+
+    pub fn set_content(&mut self, new_content: &str) {
+        self.content = UnicodeSegmentation::graphemes(new_content, true)
+            .map(|x| x.to_string())
+            .collect::<Vec<String>>();
+        self.cursor_col = new_content.len();
     }
 
     pub fn content_str(&self) -> String { self.content.join("") }
@@ -65,7 +73,7 @@ impl EditorState {
                 while let Some(c) = self.content.clone().get(i) {
                     self.content.remove(i);
                     self.cursor_col -= 1;
-                    if c == " " || i == 0 {
+                    if c == " " || c == "/" || c == "\\" || c == ":" || c == "_" || c == "-" || i == 0 {
                         break;
                     };
                     i -= 1;
