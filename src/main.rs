@@ -70,7 +70,7 @@ impl App {
         }
         match self.selected_area {
             UIArea::CommandInput => {
-                let previous_content = self.input_state.content_str();
+                let previous_content = self.input_state.content_str().clone();
                 if modifiers.contains(KeyModifiers::CONTROL) {
                     match code {
                         KeyCode::Char('w') => self.input_state.apply_event(le::EditorEvent::KillWordBack),
@@ -82,7 +82,7 @@ impl App {
                             self.autoeval_mode = !self.autoeval_mode;
                         }
                         KeyCode::Char(c) => {
-                            self.input_state.apply_event(le::EditorEvent::NewCharacter(c.to_string()));
+                            self.input_state.apply_event(le::EditorEvent::NewCharacter(c));
                         }
                         KeyCode::Backspace => {
                             self.input_state.apply_event(le::EditorEvent::Backspace);
@@ -102,7 +102,7 @@ impl App {
                         _ => {}
                     }
                 }
-                if previous_content != self.input_state.content_str() && self.autoeval_mode {
+                if previous_content.clone() != self.input_state.content_str() && self.autoeval_mode {
                     self.apply_command_result(evaluate_command(&self.input_state.content_str()));
                 }
             }
@@ -158,7 +158,7 @@ fn main() -> Result<(), failure::Error> {
             format!(
                 "{}",
                 cursor::MoveTo(
-                    input_field_rect.x + 1 + app.input_state.cursor_col as u16,
+                    input_field_rect.x + 1 + app.input_state.display_cursor_col as u16,
                     input_field_rect.y + 1
                 )
             )

@@ -398,6 +398,8 @@ dependencies = [
  "num-traits",
  "rustyline",
  "tui",
+ "unicode-segmentation",
+ "unicode-width",
 ]
 
 [[package]]
