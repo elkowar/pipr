@@ -3,15 +3,12 @@ extern crate num_derive;
 extern crate num_traits;
 
 use num_traits::FromPrimitive;
-use rustyline::error::ReadlineError;
-use rustyline::Editor;
-use std::env;
 use std::io;
 use std::io::Write;
 use std::process::Command;
 use tui::layout::{Constraint, Direction, Layout};
-use tui::style::{Color, Modifier, Style};
-use tui::widgets::{Block, Borders, Paragraph, Row, Table, Text, Widget};
+use tui::style::{Color, Style};
+use tui::widgets::{Block, Borders, Paragraph, Text, Widget};
 use tui::{backend::CrosstermBackend, Terminal};
 
 use crossterm::{
@@ -118,6 +115,7 @@ fn main() -> Result<(), failure::Error> {
     let mut app = App::new();
 
     let mut stdout = io::stdout();
+    #[allow(deprecated)]
     execute!(stdout, EnterAlternateScreen)?;
     enable_raw_mode()?;
     let backend = CrosstermBackend::new(stdout);
@@ -186,6 +184,7 @@ fn main() -> Result<(), failure::Error> {
         }
     }
     disable_raw_mode()?;
+    #[allow(deprecated)]
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     Ok(())
 }

@@ -234,6 +234,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "284f18f85651fe11e8a991b2adb42cb078325c996ed026d994719efcfca1d54b"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "kernel32-sys"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -384,6 +393,7 @@ version = "0.1.0"
 dependencies = [
  "crossterm",
  "failure",
+ "itertools 0.9.0",
  "num-derive",
  "num-traits",
  "rustyline",
@@ -533,7 +543,7 @@ dependencies = [
  "cassowary",
  "crossterm",
  "either",
- "itertools",
+ "itertools 0.8.2",
  "log",
  "unicode-segmentation",
  "unicode-width",

@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 #[derive(Debug)]
 pub struct EditorState {
     content: Vec<String>,
