@@ -1,0 +1,15 @@
+[package]
+name = "pipr"
+version = "0.1.0"
+authors = ["Leon Kowarschick <lkowarschick@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tui = { version = "0.8", default-features = false, features = ['crossterm'] }
+crossterm = "0.14"
+failure = "0.1.6"
+num-traits = "0.2"
+num-derive = "0.3"
+rustyline = "6.1.0"
