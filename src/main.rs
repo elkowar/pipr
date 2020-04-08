@@ -81,24 +81,16 @@ impl App {
                         KeyCode::Up => {
                             self.autoeval_mode = !self.autoeval_mode;
                         }
-                        KeyCode::Char(c) => {
-                            self.input_state.apply_event(le::EditorEvent::NewCharacter(c));
-                        }
-                        KeyCode::Backspace => {
-                            self.input_state.apply_event(le::EditorEvent::Backspace);
-                        }
-                        KeyCode::Delete => {
-                            self.input_state.apply_event(le::EditorEvent::Delete);
-                        }
-                        KeyCode::Left => {
-                            self.input_state.apply_event(le::EditorEvent::GoLeft);
-                        }
-                        KeyCode::Right => {
-                            self.input_state.apply_event(le::EditorEvent::GoRight);
-                        }
-                        KeyCode::Enter => {
-                            self.apply_command_result(evaluate_command(&self.input_state.content_str()));
-                        }
+                        KeyCode::Char(c) => self.input_state.apply_event(le::EditorEvent::NewCharacter(c)),
+                        KeyCode::Backspace => self.input_state.apply_event(le::EditorEvent::Backspace),
+                        KeyCode::Delete => self.input_state.apply_event(le::EditorEvent::Delete),
+
+                        KeyCode::Left => self.input_state.apply_event(le::EditorEvent::GoLeft),
+                        KeyCode::Right => self.input_state.apply_event(le::EditorEvent::GoRight),
+                        KeyCode::Home => self.input_state.apply_event(le::EditorEvent::Home),
+                        KeyCode::End => self.input_state.apply_event(le::EditorEvent::End),
+
+                        KeyCode::Enter => self.apply_command_result(evaluate_command(&self.input_state.content_str())),
                         _ => {}
                     }
                 }
@@ -158,7 +150,7 @@ fn main() -> Result<(), failure::Error> {
             format!(
                 "{}",
                 cursor::MoveTo(
-                    input_field_rect.x + 1 + app.input_state.display_cursor_col as u16,
+                    input_field_rect.x + 1 + app.input_state.displayed_cursor_column() as u16,
                     input_field_rect.y + 1
                 )
             )
