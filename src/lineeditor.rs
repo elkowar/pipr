@@ -1,3 +1,4 @@
+use super::bookmark::*;
 use unicode_segmentation::*;
 #[derive(Debug, Clone)]
 pub struct EditorState {
@@ -23,11 +24,11 @@ impl EditorState {
         }
     }
 
-    pub fn set_content(&mut self, new_content: &str) {
-        self.content = UnicodeSegmentation::graphemes(new_content, true)
-            .map(|x| x.to_string())
-            .collect::<Vec<String>>();
-        self.cursor_col = new_content.len();
+    pub fn content_to_bookmark(&self) -> Bookmark { Bookmark::new(self.content.to_owned()) }
+
+    pub fn load_bookmark(&mut self, bookmark: Bookmark) {
+        self.content = bookmark.content;
+        self.cursor_col = self.content.len();
     }
 
     pub fn content_str(&self) -> String { self.content.join("") }

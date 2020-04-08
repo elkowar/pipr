@@ -19,7 +19,9 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 
+pub mod bookmark;
 pub mod lineeditor;
+pub use bookmark::BookmarkList;
 use lineeditor as le;
 
 #[derive(PartialEq, PartialOrd, Eq, Ord, FromPrimitive, Clone, Copy, Debug)]
@@ -45,7 +47,7 @@ struct App {
     command_output: String,
     command_error: Option<String>,
     autoeval_mode: bool,
-    bookmarks: Vec<String>,
+    bookmarks: BookmarkList,
     last_unsaved: Option<String>,
     selected_bookmark_idx: Option<usize>,
 }
@@ -58,7 +60,7 @@ impl App {
             command_output: "".into(),
             command_error: None,
             autoeval_mode: false,
-            bookmarks: Vec::new(),
+            bookmarks: BookmarkList::new(),
             last_unsaved: None,
             selected_bookmark_idx: None,
         }
@@ -72,14 +74,7 @@ impl App {
         self.command_error = stderr;
     }
 
-    fn toggle_bookmarked(&mut self) {
-        let content = self.input_state.content_str();
-        if self.bookmarks.contains(&content) {
-            self.bookmarks.remove_item(&content);
-        } else {
-            self.bookmarks.push(content);
-        }
-    }
+    fn toggle_bookmarked(&mut self) { self.bookmarks.toggle_bookmark(self.input_state.content_to_bookmark()); }
 
     fn apply_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         if code == KeyCode::Tab {
@@ -117,7 +112,7 @@ impl App {
             },
             UIArea::BookmarkList => match code {
                 KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
-                    self.selected_bookmark_idx.map(|idx| self.bookmarks.remove(idx));
+                    self.selected_bookmark_idx.map(|idx| self.bookmarks.remove_at(idx));
                 }
                 KeyCode::Down | KeyCode::Char('j') => {
                     if let Some(idx) = self.selected_bookmark_idx {
@@ -129,15 +124,19 @@ impl App {
                 }
                 KeyCode::Up | KeyCode::Char('k') => {
                     if let Some(idx) = self.selected_bookmark_idx {
-                        self.selected_bookmark_idx = Some((idx - 1) % self.bookmarks.len() as usize);
+                        self.selected_bookmark_idx = Some(idx.max(0) as usize);
                     } else {
                         self.last_unsaved = Some(self.input_state.content_str());
                         self.selected_bookmark_idx = Some(0);
                     }
                 }
                 KeyCode::Enter => {
-                    if let Some(bookmark) = self.selected_bookmark_idx.and_then(|idx| self.bookmarks.get(idx)).cloned() {
-                        self.input_state.set_content(&bookmark);
+                    if let Some(bookmark) = self
+                        .selected_bookmark_idx
+                        .and_then(|idx| self.bookmarks.bookmark_at(idx))
+                        .cloned()
+                    {
+                        self.input_state.load_bookmark(bookmark);
                     }
                 }
                 _ => {}
@@ -149,6 +148,9 @@ impl App {
 
 fn main() -> Result<(), failure::Error> {
     let mut app = App::new();
+
+    let bookmarks = bookmark::load_file().unwrap_or(BookmarkList::new());
+    app.bookmarks = bookmarks;
 
     let mut stdout = io::stdout();
     #[allow(deprecated)]
@@ -169,14 +171,7 @@ fn main() -> Result<(), failure::Error> {
                 .margin(1)
                 .split(f.size());
 
-            let bookmark_items: &Vec<String> = &app.bookmarks;
-            //let bookmark_items: Vec<String> = if let Some(last_unsaved) = &app.last_unsaved {
-            //let mut items = bookmark_items.clone();
-            //items.insert(0, last_unsaved.clone());
-            //items
-            //} else {
-            //bookmark_items.clone()
-            //};
+            let bookmark_items: Vec<String> = app.bookmarks.as_strings();
 
             SelectableList::default()
                 .block(make_default_block("Bookmarks", app.selected_area == UIArea::BookmarkList))
