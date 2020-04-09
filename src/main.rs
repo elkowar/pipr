@@ -111,9 +111,6 @@ impl App {
                 _ => {}
             },
             UIArea::BookmarkList => match code {
-                KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
-                    self.selected_bookmark_idx.map(|idx| self.bookmarks.remove_at(idx));
-                }
                 KeyCode::Down | KeyCode::Char('j') => {
                     if let Some(idx) = self.selected_bookmark_idx {
                         self.selected_bookmark_idx = Some((idx + 1) % self.bookmarks.len() as usize);
@@ -124,7 +121,7 @@ impl App {
                 }
                 KeyCode::Up | KeyCode::Char('k') => {
                     if let Some(idx) = self.selected_bookmark_idx {
-                        self.selected_bookmark_idx = Some(idx.max(0) as usize);
+                        self.selected_bookmark_idx = Some((idx - 1).max(0) as usize);
                     } else {
                         self.last_unsaved = Some(self.input_state.content_str());
                         self.selected_bookmark_idx = Some(0);
@@ -176,7 +173,11 @@ fn main() -> Result<(), failure::Error> {
             SelectableList::default()
                 .block(make_default_block("Bookmarks", app.selected_area == UIArea::BookmarkList))
                 .items(bookmark_items.as_slice())
-                .select(app.selected_bookmark_idx)
+                .select(if app.selected_area == UIArea::BookmarkList {
+                    app.selected_bookmark_idx
+                } else {
+                    None
+                })
                 .highlight_style(Style::default().modifier(Modifier::ITALIC))
                 .highlight_symbol(">>")
                 .render(&mut f, root_chunks[0]);

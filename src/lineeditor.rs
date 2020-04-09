@@ -1,5 +1,5 @@
 use super::bookmark::*;
-use unicode_segmentation::*;
+
 #[derive(Debug, Clone)]
 pub struct EditorState {
     content: Vec<String>,
@@ -42,6 +42,14 @@ impl EditorState {
             .chars()
             .filter_map(unicode_width::UnicodeWidthChar::width)
             .sum::<usize>()
+    }
+
+    fn next_char_index(&self) -> usize {
+        let mut next_cursor = self.cursor_col;
+        while let None = self.content_str().get(next_cursor..next_cursor + 1) {
+            next_cursor += 1;
+        }
+        next_cursor
     }
 
     pub fn apply_event(&mut self, event: EditorEvent) {
