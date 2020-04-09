@@ -39,6 +39,13 @@ impl UIArea {
             None => FromPrimitive::from_u8(0).unwrap(),
         }
     }
+    fn prev_area(&self) -> UIArea {
+        if *self as u8 == 0 {
+            FromPrimitive::from_u8(2).unwrap()
+        } else {
+            FromPrimitive::from_u8(*self as u8 - 1).unwrap()
+        }
+    }
 }
 
 struct App<T>
@@ -85,7 +92,10 @@ where
     fn toggle_bookmarked(&mut self) { self.bookmarks.toggle_bookmark(self.input_state.content_to_bookmark()); }
 
     fn apply_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
-        if code == KeyCode::Tab {
+        if code == KeyCode::Up {
+            self.selected_area = self.selected_area.prev_area();
+            return;
+        } else if code == KeyCode::Down {
             self.selected_area = self.selected_area.next_area();
             return;
         }
@@ -167,6 +177,7 @@ fn main() -> Result<(), failure::Error> {
         run_app(App::new(IsolatedEnvironment::default()))
     }
 }
+
 fn run_app<T>(mut app: App<T>) -> Result<(), failure::Error>
 where
     T: ExecutionEnvironment,
@@ -266,6 +277,8 @@ where
                 CEvent::Key(KeyEvent { code, modifiers }) => {
                     match code {
                         KeyCode::Esc => running = false,
+                        KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => running = false,
+                        KeyCode::Char('d') if modifiers.contains(KeyModifiers::CONTROL) => running = false,
                         _ => app.apply_event(code, modifiers),
                     }
                     break;
