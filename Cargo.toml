@@ -17,3 +17,5 @@ rustyline = "6.1.0"
 itertools = "0.9"
 unicode-segmentation = "1.6.0"
 unicode-width = "0.1.5"
+which = "3.1.1"
+

@@ -4,8 +4,11 @@ extern crate num_derive;
 extern crate num_traits;
 
 use num_traits::FromPrimitive;
+use std::env;
+use std::fs::File;
 use std::io;
 use std::io::Write;
+use std::path::PathBuf;
 use std::process::Command;
 use tui::layout::{Constraint, Direction, Layout};
 use tui::style::{Color, Modifier, Style};
@@ -49,10 +52,11 @@ struct App {
     bookmarks: BookmarkList,
     last_unsaved: Option<String>,
     selected_bookmark_idx: Option<usize>,
+    unsafe_mode: bool,
 }
 
 impl App {
-    fn new() -> App {
+    fn new(unsafe_mode: bool) -> App {
         App {
             selected_area: UIArea::CommandInput,
             input_state: le::EditorState::new(),
@@ -62,11 +66,12 @@ impl App {
             bookmarks: BookmarkList::new(),
             last_unsaved: None,
             selected_bookmark_idx: None,
+            unsafe_mode,
         }
     }
 
     fn eval_input(&mut self) {
-        let (stdout, stderr) = evaluate_command(&self.input_state.content_str());
+        let (stdout, stderr) = evaluate_command(self.unsafe_mode, &self.input_state.content_str());
         if stderr == None {
             self.command_output = stdout;
         }
@@ -140,13 +145,20 @@ impl App {
                 }
                 _ => {}
             },
-            _ => {}
         }
     }
 }
 
 fn main() -> Result<(), failure::Error> {
-    let mut app = App::new();
+    let bubblewrap_available = which::which("bwrap").is_ok();
+    let unsafe_mode = std::env::args().any(|arg| arg == "--no-isolation");
+
+    if !bubblewrap_available && !unsafe_mode {
+        println!("bubblewrap installation not found. Please make sure you have `bwrap` on your path, or supply --no-isolation to disable safe-mode");
+        std::process::exit(1);
+    }
+
+    let mut app = App::new(unsafe_mode);
 
     let bookmarks = bookmark::load_file().unwrap_or(BookmarkList::new());
     app.bookmarks = bookmarks;
@@ -271,7 +283,7 @@ fn make_default_block(title: &str, selected: bool) -> Block {
     Block::default().title(title).borders(Borders::ALL).title_style(title_style)
 }
 
-fn evaluate_command(cmd: &str) -> (String, Option<String>) {
+fn evaluate_command(unsafe_mode: bool, cmd: &str) -> (String, Option<String>) {
     if cmd.contains("rm ") || cmd.contains("mv ") || cmd.contains("-i") || cmd.contains("dd ") {
         return (
             "".into(),
@@ -279,11 +291,26 @@ fn evaluate_command(cmd: &str) -> (String, Option<String>) {
         );
     }
 
-    let output = Command::new("bash")
-        .arg("-c")
-        .arg(cmd)
-        .output()
-        .expect("failed to execute process");
+    let output = if unsafe_mode {
+        let args = "--ro-bind /usr /usr --symlink usr/lib64 /lib64 --tmpfs /tmp --proc /proc --dev /dev --ro-bind /etc /etc --die-with-parent --share-net --unshare-pid";
+        let mut command = Command::new("bwrap");
+        for arg in args.split(" ") {
+            command.arg(arg);
+        }
+        command
+            .arg("bash")
+            .arg("-c")
+            .arg(cmd)
+            .output()
+            .expect("Failed to execute process in bwrap. this might be a bwrap problem,... or not")
+    } else {
+        Command::new("bash")
+            .arg("bash")
+            .arg("-c")
+            .arg("cmd")
+            .output()
+            .expect("failed to execute process")
+    };
     let stdout = std::str::from_utf8(&output.stdout).unwrap().to_owned();
     let stderr = std::str::from_utf8(&output.stderr).unwrap().to_owned();
     (stdout, if stderr.is_empty() { None } else { Some(stderr) })
