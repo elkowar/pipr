@@ -1,5 +1,4 @@
 use super::bookmark::*;
-use itertools::Itertools;
 use unicode_width::*;
 
 #[derive(Debug, Clone)]
