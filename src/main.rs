@@ -28,7 +28,6 @@ use lineeditor as le;
 enum UIArea {
     CommandInput,
     Config,
-    Output,
     BookmarkList,
 }
 
@@ -86,6 +85,9 @@ impl App {
                 let previous_content = self.input_state.content_str().clone();
                 match code {
                     KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => self.toggle_bookmarked(),
+                    KeyCode::Char('z') if modifiers.contains(KeyModifiers::CONTROL) => {
+                        self.last_unsaved.clone().map(|x| self.input_state.set_content(&x));
+                    }
 
                     KeyCode::Char('w') if modifiers.contains(KeyModifiers::CONTROL) => {
                         self.input_state.apply_event(le::EditorEvent::KillWordBack)
@@ -190,20 +192,24 @@ fn main() -> Result<(), failure::Error> {
             input_field_rect = exec_chunks[0];
 
             let input_text = [Text::raw(format!("{}", &app.input_state.content_str()))];
-
             Paragraph::new(input_text.iter())
                 .block(make_default_block("Command", app.selected_area == UIArea::CommandInput))
-                .render(&mut f, exec_chunks[0]);
+                .style(if app.autoeval_mode {
+                    Style::default().fg(Color::Red)
+                } else {
+                    Style::default()
+                })
+                .render(&mut f, input_field_rect);
 
             let output_text = [Text::raw(format!("{}", &app.command_output))];
             Paragraph::new(output_text.iter())
-                .block(make_default_block("Output", app.selected_area == UIArea::Output))
+                .block(make_default_block("Output", false))
                 .render(&mut f, exec_chunks[2]);
 
             if let Some(error) = &app.command_error {
                 let error_text = [Text::raw(format!("{}", error))];
                 Paragraph::new(error_text.iter())
-                    .block(make_default_block("Stderr", app.selected_area == UIArea::Output))
+                    .block(make_default_block("Stderr", false))
                     .render(&mut f, exec_chunks[3]);
             }
 
@@ -251,6 +257,7 @@ fn main() -> Result<(), failure::Error> {
     disable_raw_mode()?;
     #[allow(deprecated)]
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    println!("{}", app.input_state.content_str());
     Ok(())
 }
 
@@ -265,7 +272,7 @@ fn make_default_block(title: &str, selected: bool) -> Block {
 }
 
 fn evaluate_command(cmd: &str) -> (String, Option<String>) {
-    if cmd.contains("rm ") || cmd.contains("mv ") || cmd.contains("-i") {
+    if cmd.contains("rm ") || cmd.contains("mv ") || cmd.contains("-i") || cmd.contains("dd ") {
         return (
             "".into(),
             Some("Will not evaluate this command. it's for your own safety, believe me....".into()),

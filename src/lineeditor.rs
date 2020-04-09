@@ -1,8 +1,10 @@
 use super::bookmark::*;
+use itertools::Itertools;
+use unicode_width::*;
 
 #[derive(Debug, Clone)]
 pub struct EditorState {
-    content: Vec<String>,
+    content: String,
     pub cursor_col: usize,
 }
 pub enum EditorEvent {
@@ -19,57 +21,64 @@ pub enum EditorEvent {
 impl EditorState {
     pub fn new() -> EditorState {
         EditorState {
-            content: Vec::new(),
+            content: String::new(),
             cursor_col: 0,
         }
     }
 
-    pub fn content_to_bookmark(&self) -> Bookmark { Bookmark::new(self.content.to_owned()) }
+    pub fn content_to_bookmark(&self) -> Bookmark { Bookmark::new(&self.content) }
 
-    pub fn load_bookmark(&mut self, bookmark: Bookmark) {
-        self.content = bookmark.content;
+    pub fn load_bookmark(&mut self, bookmark: Bookmark) { self.content = bookmark.content; }
+
+    pub fn set_content(&mut self, new_content: &str) {
+        self.content = new_content.to_owned();
         self.cursor_col = self.content.len();
     }
 
-    pub fn content_str(&self) -> String { self.content.join("") }
-    pub fn displayed_cursor_column(&self) -> usize {
-        self.content
-            .iter()
-            .take(self.cursor_col)
-            .map(|elem| elem.clone())
-            .collect::<Vec<String>>()
-            .join("")
-            .chars()
-            .filter_map(unicode_width::UnicodeWidthChar::width)
-            .sum::<usize>()
-    }
+    pub fn content_str(&self) -> String { self.content.to_owned() }
+    pub fn displayed_cursor_column(&self) -> usize { UnicodeWidthStr::width(&self.content[..self.cursor_col]) }
 
     fn next_char_index(&self) -> usize {
-        let mut next_cursor = self.cursor_col;
-        while let None = self.content_str().get(next_cursor..next_cursor + 1) {
-            next_cursor += 1;
+        if self.cursor_col == self.content.len() {
+            return self.cursor_col;
         }
-        next_cursor
+        let mut new_cursor = self.cursor_col + 1;
+        while let None = self.content_str().get(new_cursor..) {
+            new_cursor += 1;
+        }
+        new_cursor
+    }
+
+    fn prev_char_index(&self) -> usize {
+        if self.cursor_col == 0 {
+            return 0;
+        }
+        let mut new_cursor = self.cursor_col - 1;
+        while let None = self.content_str().get(new_cursor..) {
+            new_cursor -= 1;
+        }
+        new_cursor
     }
 
     pub fn apply_event(&mut self, event: EditorEvent) {
         match event {
             EditorEvent::NewCharacter(c) => {
-                self.content.insert(self.cursor_col, c.to_string());
-                self.cursor_col += 1
+                self.content.insert(self.cursor_col, c);
+                self.cursor_col = self.next_char_index();
             }
             EditorEvent::Backspace if self.cursor_col > 0 => {
-                self.content.remove(self.cursor_col - 1);
-                self.cursor_col -= 1
+                let new_cursor = self.prev_char_index();
+                self.content.remove(new_cursor);
+                self.cursor_col = new_cursor;
             }
             EditorEvent::Delete if self.cursor_col < self.content.len() => {
                 self.content.remove(self.cursor_col);
             }
             EditorEvent::GoLeft if self.cursor_col > 0 => {
-                self.cursor_col -= 1;
+                self.cursor_col = self.prev_char_index();
             }
             EditorEvent::GoRight if self.cursor_col < self.content.len() => {
-                self.cursor_col += 1;
+                self.cursor_col = self.next_char_index();
             }
             EditorEvent::Home => {
                 self.cursor_col = 0;
@@ -78,17 +87,95 @@ impl EditorState {
                 self.cursor_col = self.content.len();
             }
             EditorEvent::KillWordBack if !self.content.is_empty() => {
-                let mut i = self.content.len() - 1;
-                while let Some(c) = self.content.clone().get(i) {
-                    self.content.remove(i);
-                    self.cursor_col -= 1;
-                    if c == " " || c == "/" || c == "\\" || c == ":" || c == "_" || c == "-" || i == 0 {
+                while let Some(c) = self.content.to_owned().get(self.prev_char_index()..self.cursor_col) {
+                    self.cursor_col = self.prev_char_index();
+                    self.content.remove(self.cursor_col);
+                    if c == " " || c == "/" || c == "\\" || c == ":" || c == "_" || c == "-" || self.cursor_col == 0 {
                         break;
-                    };
-                    i -= 1;
+                    }
                 }
             }
             _ => {}
         }
+    }
+}
+
+pub mod test {
+    #[allow(unused_imports)]
+    use super::*;
+    #[test]
+    pub fn test_lineeditor_ascii() {
+        let mut le = EditorState::new();
+        assert_eq!(le.content_str(), "");
+
+        le.apply_event(EditorEvent::NewCharacter('a'));
+        assert_eq!(le.content_str(), "a");
+
+        le.apply_event(EditorEvent::NewCharacter('a'));
+        assert_eq!(le.content_str(), "aa");
+        assert_eq!(le.displayed_cursor_column(), 2);
+
+        le.apply_event(EditorEvent::Backspace);
+        assert_eq!(le.content_str(), "a");
+        assert_eq!(le.displayed_cursor_column(), 1);
+
+        le.apply_event(EditorEvent::Backspace);
+        assert_eq!(le.content_str(), "");
+        assert_eq!(le.displayed_cursor_column(), 0);
+
+        le.apply_event(EditorEvent::Backspace);
+        assert_eq!(le.content_str(), "");
+        assert_eq!(le.displayed_cursor_column(), 0);
+
+        le.apply_event(EditorEvent::NewCharacter('a'));
+        assert_eq!(le.content_str(), "a");
+        assert_eq!(le.displayed_cursor_column(), 1);
+
+        le.apply_event(EditorEvent::GoLeft);
+        assert_eq!(le.displayed_cursor_column(), 0);
+
+        le.apply_event(EditorEvent::Delete);
+        assert_eq!(le.content_str(), "");
+        assert_eq!(le.displayed_cursor_column(), 0);
+
+        le.apply_event(EditorEvent::Delete);
+        assert_eq!(le.content_str(), "");
+        assert_eq!(le.displayed_cursor_column(), 0);
+    }
+
+    #[test]
+    pub fn test_advanced() {
+        let mut le = EditorState::new();
+        le.set_content("as");
+        assert_eq!(le.content_str(), "as");
+        assert_eq!(le.displayed_cursor_column(), 2 as usize);
+
+        le.apply_event(EditorEvent::KillWordBack);
+        assert_eq!(le.content_str(), "");
+        assert_eq!(le.displayed_cursor_column(), 0 as usize);
+
+        le.set_content("as as as");
+        assert_eq!(le.content_str(), "as as as");
+        assert_eq!(le.displayed_cursor_column(), 8 as usize);
+
+        le.apply_event(EditorEvent::KillWordBack);
+        assert_eq!(le.content_str(), "as as");
+        assert_eq!(le.displayed_cursor_column(), 5 as usize);
+    }
+
+    #[test]
+    pub fn test_lineeditor_umlaut() {
+        let mut le = EditorState::new();
+        assert_eq!(le.content_str(), "");
+
+        le.apply_event(EditorEvent::NewCharacter('ä'));
+        assert_eq!(le.content_str(), "ä");
+        assert_eq!(le.displayed_cursor_column(), 1);
+        le.apply_event(EditorEvent::NewCharacter('ä'));
+        assert_eq!(le.content_str(), "ää");
+        assert_eq!(le.displayed_cursor_column(), 2);
+
+        le.apply_event(EditorEvent::GoLeft);
+        assert_eq!(le.displayed_cursor_column(), 1);
     }
 }

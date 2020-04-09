@@ -6,17 +6,16 @@ const BOOKMARKS_PATH_RELATIVE_TO_HOME: &'static str = ".config/pipr/bookmarks";
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Bookmark {
-    pub content: Vec<String>,
+    pub content: String,
 }
 
 impl Bookmark {
-    pub fn new(content: Vec<String>) -> Bookmark { Bookmark { content } }
-    pub fn to_string(&self) -> String { self.content.join("") }
-    pub fn from_string(string: &str) -> Bookmark {
+    pub fn new(content: &str) -> Bookmark {
         Bookmark {
-            content: string.chars().map(|c| c.to_string()).collect(),
+            content: content.to_owned(),
         }
     }
+    pub fn to_string(&self) -> String { self.content.clone() }
 }
 
 pub struct BookmarkList(Vec<Bookmark>);
@@ -62,12 +61,7 @@ pub fn load_file() -> Option<BookmarkList> {
     let mut contents = String::new();
     file.read_to_string(&mut contents).ok()?;
 
-    Some(
-        contents
-            .lines()
-            .map(|line| Bookmark::from_string(&line))
-            .collect::<BookmarkList>(),
-    )
+    Some(contents.lines().map(|line| Bookmark::new(&line)).collect::<BookmarkList>())
 }
 
 pub fn write_to_file(bookmarks: &BookmarkList) {
