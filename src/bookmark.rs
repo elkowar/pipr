@@ -2,7 +2,7 @@ use std::env;
 use std::fs::{DirBuilder, File};
 use std::io::prelude::*;
 use std::path::Path;
-const BOOKMARKS_PATH_RELATIVE_TO_HOME: &'static str = ".config/pipr/bookmarks";
+pub const BOOKMARKS_PATH_RELATIVE_TO_HOME: &'static str = ".config/pipr/bookmarks";
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Bookmark {

@@ -40,8 +40,8 @@ impl EditorState {
 
     pub fn set_content(&mut self, new_content: &Vec<String>) {
         self.lines = new_content.clone();
-        self.cursor_col = self.current_line().len();
         self.cursor_line = self.lines.len() - 1;
+        self.cursor_col = self.current_line().len();
     }
 
     pub fn content_str(&self) -> String {
@@ -286,8 +286,8 @@ pub mod test {
         assert_eq!(le.content_lines(), vec!["ab"]);
 
         le.set_content(&vec!["abc".into(), "a".into()]);
-        assert_eq!(le.cursor_col, 1);
         assert_eq!(le.cursor_line, 1);
+        assert_eq!(le.cursor_col, 1);
 
         le.apply_event(EditorEvent::GoUp);
         assert_eq!(le.cursor_col, 1);

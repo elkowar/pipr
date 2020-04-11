@@ -1,6 +1,7 @@
 use super::bookmark::BookmarkList;
 use super::command_evaluation::*;
 use super::lineeditor as le;
+use super::pipr_config::*;
 use num_traits::FromPrimitive;
 
 use crossterm::event::{KeyCode, KeyModifiers};
@@ -38,11 +39,12 @@ pub struct App {
     pub last_unsaved: Option<String>,
     pub selected_bookmark_idx: Option<usize>,
     pub executor: Executor,
+    pub config: PiprConfig,
     pub should_quit: bool,
 }
 
 impl App {
-    pub fn new(executor: Executor) -> App {
+    pub fn new(executor: Executor, config: PiprConfig) -> App {
         App {
             selected_area: UIArea::CommandInput,
             input_state: le::EditorState::new(),
@@ -52,8 +54,9 @@ impl App {
             bookmarks: BookmarkList::new(),
             last_unsaved: None,
             selected_bookmark_idx: None,
-            executor,
             should_quit: false,
+            executor,
+            config,
         }
     }
 
@@ -136,7 +139,7 @@ impl App {
         }
     }
 
-    pub fn apply_cmd_output(&mut self, (stdout, stderr): (String, String)) {
+    pub fn on_cmd_output(&mut self, (stdout, stderr): (String, String)) {
         if stderr.is_empty() {
             self.command_output = stdout;
         }
