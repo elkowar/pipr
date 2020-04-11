@@ -10,7 +10,6 @@ pub struct EditorState {
 pub enum EditorEvent {
     NewCharacter(char),
     NewLine,
-    RemoveLine,
     Backspace,
     Delete,
     GoLeft,
@@ -44,7 +43,7 @@ impl EditorState {
     pub fn set_content(&mut self, new_content: &Vec<String>) {
         self.lines = new_content.clone();
         self.cursor_col = self.current_line().len();
-        self.cursor_line = 0;
+        self.cursor_line = self.lines.len() - 1;
     }
 
     pub fn content_str(&self) -> String {
@@ -105,29 +104,43 @@ impl EditorState {
                 self.cursor_col = self.next_char_index();
             }
             EditorEvent::NewLine => {
-                self.lines.insert(self.cursor_line + 1, String::new());
+                let cursor_col = self.cursor_col;
+                let rest_of_line = self.current_line_mut().split_off(cursor_col);
+                self.lines.insert(self.cursor_line + 1, rest_of_line);
                 self.goto_line(self.cursor_line + 1);
+                self.cursor_col = 0;
             }
-            EditorEvent::RemoveLine => {
-                if self.lines.len() > 1 {
-                    self.lines.remove(self.cursor_line);
-                    self.goto_line(self.cursor_line - 1);
+            EditorEvent::Backspace => {
+                if self.cursor_col == 0 && self.cursor_line > 0 {
+                    let removed_line = self.lines.remove(self.cursor_line);
+                    self.cursor_line -= 1;
+                    self.cursor_col = self.current_line().len();
+                    self.current_line_mut().push_str(&removed_line);
+                } else if self.cursor_col > 0 {
+                    let new_cursor = self.prev_char_index();
+                    self.current_line_mut().remove(new_cursor);
+                    self.cursor_col = new_cursor;
                 }
-            }
-            EditorEvent::Backspace if self.cursor_col > 0 => {
-                let new_cursor = self.prev_char_index();
-                self.current_line_mut().remove(new_cursor);
-                self.cursor_col = new_cursor;
             }
             EditorEvent::Delete if self.cursor_col < self.current_line().len() => {
                 let cursor_col = self.cursor_col;
                 self.current_line_mut().remove(cursor_col);
             }
-            EditorEvent::GoLeft if self.cursor_col > 0 => {
-                self.cursor_col = self.prev_char_index();
+            EditorEvent::GoLeft => {
+                if self.cursor_col > 0 {
+                    self.cursor_col = self.prev_char_index();
+                } else if self.cursor_line > 0 {
+                    self.cursor_line -= 1;
+                    self.cursor_col = self.current_line().len();
+                }
             }
-            EditorEvent::GoRight if self.cursor_col < self.current_line().len() => {
-                self.cursor_col = self.next_char_index();
+            EditorEvent::GoRight => {
+                if self.cursor_col < self.current_line().len() {
+                    self.cursor_col = self.next_char_index();
+                } else if self.cursor_line < self.lines.len() - 1 {
+                    self.cursor_line += 1;
+                    self.cursor_col = 0;
+                }
             }
             EditorEvent::GoUp if self.cursor_line > 0 => {
                 self.goto_line(self.cursor_line - 1);
@@ -255,16 +268,13 @@ pub mod test {
         assert_eq!(le.content_lines(), vec!["", "a"]);
         assert_eq!(le.cursor_line, 1);
 
-        le.apply_event(EditorEvent::RemoveLine);
-        assert_eq!(le.content_lines(), vec![""]);
-        assert_eq!(le.cursor_line, 0);
-
         le.set_content(&vec!["a".into(), "b".into()]);
         assert_eq!(le.content_lines(), vec!["a", "b"]);
+        assert_eq!(le.cursor_line, 1);
+        le.apply_event(EditorEvent::Home);
+        le.apply_event(EditorEvent::Backspace);
         assert_eq!(le.cursor_line, 0);
-        le.apply_event(EditorEvent::RemoveLine);
-        assert_eq!(le.cursor_line, 0);
-        assert_eq!(le.content_lines(), vec!["b"]);
+        assert_eq!(le.content_lines(), vec!["ab"]);
 
         le.set_content(&vec!["abc".into(), "a".into()]);
         assert_eq!(le.cursor_col, 1);

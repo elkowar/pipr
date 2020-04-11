@@ -8,7 +8,7 @@ use std::io;
 use std::io::Write;
 use tui::layout::{Constraint, Direction, Layout};
 use tui::style::{Color, Modifier, Style};
-use tui::widgets::{Block, Borders, Paragraph, SelectableList, Text, Widget};
+use tui::widgets::{Block, Borders, List, Paragraph, SelectableList, Text, Widget};
 use tui::{backend::CrosstermBackend, Terminal};
 
 use crossterm::{
@@ -115,9 +115,6 @@ where
                     }
                     KeyCode::Char('\r') | KeyCode::Char('\n') if modifiers.contains(KeyModifiers::ALT) => {
                         self.input_state.apply_event(le::EditorEvent::NewLine)
-                    }
-                    KeyCode::Backspace if modifiers.contains(KeyModifiers::CONTROL) => {
-                        self.input_state.apply_event(le::EditorEvent::RemoveLine)
                     }
                     KeyCode::Char(c) => self.input_state.apply_event(le::EditorEvent::NewCharacter(c)),
                     KeyCode::Backspace => self.input_state.apply_event(le::EditorEvent::Backspace),
@@ -230,19 +227,20 @@ where
 
             let exec_chunks = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([Length(3), Length(3), Percentage(50), Percentage(50)].as_ref())
+                .constraints([Percentage(34), Length(3), Percentage(33), Percentage(33)].as_ref())
                 .split(root_chunks[1]);
 
             input_field_rect = exec_chunks[0];
+            let command_input_lines = app.input_state.content_lines();
 
-            let input_text = [Text::raw(format!("{}", &app.input_state.current_line()))];
-            Paragraph::new(input_text.iter())
-                .block(make_default_block("Command", app.selected_area == UIArea::CommandInput))
-                .style(if app.autoeval_mode {
-                    Style::default().fg(Color::Red)
-                } else {
-                    Style::default()
-                })
+            List::new(command_input_lines.iter().map(|l| Text::raw(l)))
+                .block(
+                    make_default_block("Command", app.selected_area == UIArea::CommandInput).style(if app.autoeval_mode {
+                        Style::default().fg(Color::Red)
+                    } else {
+                        Style::default()
+                    }),
+                )
                 .render(&mut f, input_field_rect);
 
             let output_text = [Text::raw(format!("{}", &app.command_output))];
@@ -274,7 +272,7 @@ where
                 "{}",
                 cursor::MoveTo(
                     input_field_rect.x + 1 + app.input_state.displayed_cursor_column() as u16,
-                    input_field_rect.y + 1
+                    input_field_rect.y + 1 + app.input_state.cursor_line as u16,
                 )
             )
             .as_bytes(),

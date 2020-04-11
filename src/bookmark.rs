@@ -15,20 +15,30 @@ impl Bookmark {
             content: content.to_owned(),
         }
     }
-    pub fn to_string(&self) -> String { self.content.clone() }
+    pub fn to_string(&self) -> String {
+        self.content.clone()
+    }
 }
 
 pub struct BookmarkList(Vec<Bookmark>);
 
 impl BookmarkList {
-    pub fn new() -> BookmarkList { BookmarkList(Vec::new()) }
+    pub fn new() -> BookmarkList {
+        BookmarkList(Vec::new())
+    }
     pub fn add_bookmark(&mut self, bookmark: Bookmark) {
         self.0.push(bookmark);
         write_to_file(self);
     }
-    pub fn as_strings(&self) -> Vec<String> { self.0.iter().map(|bookmark| bookmark.to_string()).collect() }
-    pub fn bookmark_at(&self, idx: usize) -> Option<&Bookmark> { self.0.get(idx) }
-    pub fn len(&self) -> usize { self.0.len() }
+    pub fn as_strings(&self) -> Vec<String> {
+        self.0.iter().map(|bookmark| bookmark.to_string()).collect()
+    }
+    pub fn bookmark_at(&self, idx: usize) -> Option<&Bookmark> {
+        self.0.get(idx)
+    }
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
     pub fn remove_bookmark(&mut self, bookmark: &Bookmark) {
         self.0.remove_item(&bookmark);
         write_to_file(self);
