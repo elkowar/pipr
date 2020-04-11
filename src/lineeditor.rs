@@ -31,13 +31,11 @@ impl EditorState {
     }
 
     pub fn content_to_bookmark(&self) -> Bookmark {
-        //Bookmark::new(&self.lines)
-        unimplemented!()
+        Bookmark::new(&self.lines)
     }
 
-    pub fn load_bookmark(&mut self, bookmark: Bookmark) {
-        //self.lines = bookmark.content;
-        unimplemented!()
+    pub fn load_bookmark(&mut self, bookmark: &Bookmark) {
+        self.set_content(&bookmark.to_lines());
     }
 
     pub fn set_content(&mut self, new_content: &Vec<String>) {
@@ -58,12 +56,12 @@ impl EditorState {
         &self.lines[self.cursor_line]
     }
 
-    fn current_line_mut(&mut self) -> &mut String {
-        &mut self.lines[self.cursor_line]
-    }
-
     pub fn displayed_cursor_column(&self) -> usize {
         UnicodeWidthStr::width(&self.current_line()[..self.cursor_col])
+    }
+
+    fn current_line_mut(&mut self) -> &mut String {
+        &mut self.lines[self.cursor_line]
     }
 
     fn next_char_index(&self) -> usize {
@@ -88,6 +86,8 @@ impl EditorState {
         new_cursor
     }
 
+    /// go to another line, keeping the cursor column the same if possible,
+    /// otherwise going to the last column of the line
     fn goto_line(&mut self, line_nr: usize) {
         assert!(line_nr < self.lines.len());
         self.cursor_line = line_nr;
@@ -111,20 +111,29 @@ impl EditorState {
                 self.cursor_col = 0;
             }
             EditorEvent::Backspace => {
-                if self.cursor_col == 0 && self.cursor_line > 0 {
+                if self.cursor_col > 0 {
+                    // delete character
+                    let new_cursor = self.prev_char_index();
+                    self.current_line_mut().remove(new_cursor);
+                    self.cursor_col = new_cursor;
+                } else if self.cursor_line > 0 {
+                    // backspace at start of line: delete newline
                     let removed_line = self.lines.remove(self.cursor_line);
                     self.cursor_line -= 1;
                     self.cursor_col = self.current_line().len();
                     self.current_line_mut().push_str(&removed_line);
-                } else if self.cursor_col > 0 {
-                    let new_cursor = self.prev_char_index();
-                    self.current_line_mut().remove(new_cursor);
-                    self.cursor_col = new_cursor;
                 }
             }
-            EditorEvent::Delete if self.cursor_col < self.current_line().len() => {
-                let cursor_col = self.cursor_col;
-                self.current_line_mut().remove(cursor_col);
+            EditorEvent::Delete => {
+                if self.cursor_col < self.current_line().len() {
+                    // delete character
+                    let cursor_col = self.cursor_col;
+                    self.current_line_mut().remove(cursor_col);
+                } else if self.cursor_line < self.lines.len() - 1 {
+                    // delete at end of line: delete newline
+                    let removed_line = self.lines.remove(self.cursor_line + 1);
+                    self.current_line_mut().push_str(&removed_line);
+                }
             }
             EditorEvent::GoLeft => {
                 if self.cursor_col > 0 {

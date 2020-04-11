@@ -161,7 +161,7 @@ where
                         .and_then(|idx| self.bookmarks.bookmark_at(idx))
                         .cloned()
                     {
-                        self.input_state.load_bookmark(bookmark);
+                        self.input_state.load_bookmark(&bookmark);
                     }
                 }
                 _ => {}
@@ -227,7 +227,14 @@ where
 
             let exec_chunks = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([Percentage(34), Length(3), Percentage(33), Percentage(33)].as_ref())
+                .constraints(
+                    [
+                        Length(2 + app.input_state.content_lines().len() as u16),
+                        Length(3),
+                        Percentage(100),
+                    ]
+                    .as_ref(),
+                )
                 .split(root_chunks[1]);
 
             input_field_rect = exec_chunks[0];
@@ -243,16 +250,21 @@ where
                 )
                 .render(&mut f, input_field_rect);
 
+            let output_chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Percentage(50), Percentage(50)].as_ref())
+                .split(exec_chunks[2]);
+
             let output_text = [Text::raw(format!("{}", &app.command_output))];
             Paragraph::new(output_text.iter())
                 .block(make_default_block("Output", false))
-                .render(&mut f, exec_chunks[2]);
+                .render(&mut f, output_chunks[0]);
 
             if let Some(error) = &app.command_error {
                 let error_text = [Text::raw(format!("{}", error))];
                 Paragraph::new(error_text.iter())
                     .block(make_default_block("Stderr", false))
-                    .render(&mut f, exec_chunks[3]);
+                    .render(&mut f, output_chunks[1]);
             }
 
             let config_chunks = Layout::default()

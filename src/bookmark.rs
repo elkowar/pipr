@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use std::env;
 use std::fs::{DirBuilder, File};
 use std::io::prelude::*;
@@ -6,17 +7,20 @@ const BOOKMARKS_PATH_RELATIVE_TO_HOME: &'static str = ".config/pipr/bookmarks";
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Bookmark {
-    pub content: String,
+    pub content: Vec<String>,
 }
 
 impl Bookmark {
-    pub fn new(content: &str) -> Bookmark {
+    pub fn new(content: &Vec<String>) -> Bookmark {
         Bookmark {
             content: content.to_owned(),
         }
     }
-    pub fn to_string(&self) -> String {
+    pub fn to_lines(&self) -> Vec<String> {
         self.content.clone()
+    }
+    pub fn first_line(&self) -> &str {
+        &self.content[0]
     }
 }
 
@@ -26,12 +30,13 @@ impl BookmarkList {
     pub fn new() -> BookmarkList {
         BookmarkList(Vec::new())
     }
+
     pub fn add_bookmark(&mut self, bookmark: Bookmark) {
         self.0.push(bookmark);
         write_to_file(self);
     }
     pub fn as_strings(&self) -> Vec<String> {
-        self.0.iter().map(|bookmark| bookmark.to_string()).collect()
+        self.0.iter().map(|bookmark| bookmark.to_lines().join("\n")).collect()
     }
     pub fn bookmark_at(&self, idx: usize) -> Option<&Bookmark> {
         self.0.get(idx)
@@ -71,7 +76,18 @@ pub fn load_file() -> Option<BookmarkList> {
     let mut contents = String::new();
     file.read_to_string(&mut contents).ok()?;
 
-    Some(contents.lines().map(|line| Bookmark::new(&line)).collect::<BookmarkList>())
+    let mut bookmarks = BookmarkList::new();
+    let mut current_bookmark = Vec::new();
+    for line in contents.lines() {
+        if line == "---" {
+            bookmarks.add_bookmark(Bookmark::new(&current_bookmark));
+            current_bookmark = Vec::new();
+        } else {
+            current_bookmark.push(line.to_owned());
+        }
+    }
+    bookmarks.add_bookmark(Bookmark::new(&current_bookmark)); // add last started bookmark
+    Some(bookmarks)
 }
 
 pub fn write_to_file(bookmarks: &BookmarkList) {
@@ -82,5 +98,6 @@ pub fn write_to_file(bookmarks: &BookmarkList) {
         .create(&bookmarks_path.parent().unwrap())
         .unwrap();
     let mut file = File::create(&bookmarks_path).unwrap();
-    file.write_all(bookmarks.as_strings().join("\n").as_bytes()).unwrap();
+
+    file.write_all(bookmarks.as_strings().join("\n---\n").as_bytes()).unwrap();
 }
