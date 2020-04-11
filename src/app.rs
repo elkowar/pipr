@@ -28,45 +28,37 @@ impl UIArea {
     }
 }
 
-pub struct App<T>
-where
-    T: ExecutionEnvironment,
-{
+pub struct App {
     pub selected_area: UIArea,
     pub input_state: le::EditorState,
     pub command_output: String,
-    pub command_error: Option<String>,
+    pub command_error: String,
     pub autoeval_mode: bool,
     pub bookmarks: BookmarkList,
     pub last_unsaved: Option<String>,
     pub selected_bookmark_idx: Option<usize>,
-    pub execution_environment: T,
+    pub executor: Executor,
+    pub should_quit: bool,
 }
 
-impl<E> App<E>
-where
-    E: ExecutionEnvironment,
-{
-    pub fn new(execution_environment: E) -> App<E> {
+impl App {
+    pub fn new(executor: Executor) -> App {
         App {
             selected_area: UIArea::CommandInput,
             input_state: le::EditorState::new(),
             command_output: "".into(),
-            command_error: None,
+            command_error: "".into(),
             autoeval_mode: false,
             bookmarks: BookmarkList::new(),
             last_unsaved: None,
             selected_bookmark_idx: None,
-            execution_environment,
+            executor,
+            should_quit: false,
         }
     }
 
     fn eval_input(&mut self) {
-        let (stdout, stderr) = self.execution_environment.execute(&self.input_state.content_str());
-        if stderr == None {
-            self.command_output = stdout;
-        }
-        self.command_error = stderr;
+        self.executor.execute(&self.input_state.content_str());
     }
 
     fn toggle_bookmarked(&mut self) {
@@ -144,18 +136,24 @@ where
         }
     }
 
+    pub fn apply_cmd_output(&mut self, (stdout, stderr): (String, String)) {
+        if stderr.is_empty() {
+            self.command_output = stdout;
+        }
+        self.command_error = stderr;
+    }
+
     pub fn apply_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         if code == KeyCode::Tab {
-            self.selected_area = self.selected_area.prev_area();
-            return;
-        } else if code == KeyCode::BackTab {
             self.selected_area = self.selected_area.next_area();
-            return;
-        }
-        match self.selected_area {
-            UIArea::CommandInput => self.command_input_event(code, modifiers),
-            UIArea::Config => self.config_event(code),
-            UIArea::BookmarkList => self.bookmarklist_event(code),
+        } else if code == KeyCode::BackTab {
+            self.selected_area = self.selected_area.prev_area();
+        } else {
+            match self.selected_area {
+                UIArea::CommandInput => self.command_input_event(code, modifiers),
+                UIArea::Config => self.config_event(code),
+                UIArea::BookmarkList => self.bookmarklist_event(code),
+            }
         }
     }
 }
