@@ -1,4 +1,3 @@
-use itertools::Itertools;
 use std::env;
 use std::fs::{DirBuilder, File};
 use std::io::prelude::*;
