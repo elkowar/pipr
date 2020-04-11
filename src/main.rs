@@ -1,10 +1,12 @@
 #![feature(vec_remove_item)]
 #[macro_use]
 extern crate num_derive;
+extern crate clap;
 extern crate lazy_static;
 extern crate num_traits;
+
+use clap::Arg;
 use itertools::Itertools;
-use std::io::Stdin;
 use std::io::Write;
 use std::io::{self, Read};
 use std::process::{Command, Stdio};
@@ -31,11 +33,30 @@ pub use lineeditor as le;
 pub use pipr_config::*;
 
 fn main() -> Result<(), failure::Error> {
+    let matches = clap::App::new("Pipr")
+        .arg(Arg::with_name("stdin-default").long("stdin-default"))
+        .arg(Arg::with_name("no-isolation").long("no-isolation"))
+        .arg(Arg::with_name("default").long("default").default_value("").takes_value(true))
+        .get_matches();
+
+    if matches.is_present("stdin-default") {
+        let mut supplied_input = String::new();
+        io::stdin().read_to_string(&mut supplied_input).unwrap();
+        let current_exe = std::env::current_exe()?;
+        dbg!(&current_exe);
+        let mut child_command = Command::new(current_exe);
+        child_command.arg("--default").arg(supplied_input);
+        for arg in std::env::args().skip(1).filter(|x| x != "--stdin-default") {
+            child_command.arg(arg);
+        }
+        child_command.spawn()?.wait_with_output()?;
+        return Ok(());
+    }
+
     let bubblewrap_available = which::which("bwrap").is_ok();
-    let execution_mode = if std::env::args().any(|arg| arg == "--no-isolation") {
-        ExecutionMode::UNSAFE
-    } else {
-        ExecutionMode::ISOLATED
+    let execution_mode = match matches.is_present("no-isolation") {
+        true => ExecutionMode::UNSAFE,
+        false => ExecutionMode::ISOLATED,
     };
 
     if !bubblewrap_available && execution_mode == ExecutionMode::ISOLATED {
@@ -43,22 +64,12 @@ fn main() -> Result<(), failure::Error> {
         std::process::exit(1);
     }
 
-    let has_stdin_default = std::env::args().any(|arg| arg == "--stdin-default");
-    let default_content = if has_stdin_default {
-        let mut supplied_input = String::new();
-        io::stdin().read_to_string(&mut supplied_input).unwrap();
-        supplied_input
-    } else {
-        "".into()
-    };
-
     let config = PiprConfig::load_from_file();
 
     let executor = Executor::start_executor(execution_mode);
     let mut app = App::new(executor, config.clone());
-    if !default_content.is_empty() {
-        app.input_state
-            .set_content(&default_content.lines().map(|x| x.into()).collect());
+    if let Some(default_value) = matches.value_of("default") {
+        app.input_state.set_content(&default_value.lines().map_into().collect());
     }
     run_app(&mut app)?;
 
@@ -69,9 +80,7 @@ fn main() -> Result<(), failure::Error> {
             for arg in finish_hook.iter().dropping(1) {
                 command.arg(arg);
             }
-            command.stdin(Stdio::piped());
-
-            let mut child = command.spawn()?;
+            let mut child = command.stdin(Stdio::piped()).spawn()?;
             let stdin = child.stdin.as_mut().unwrap();
             stdin.write_all(&app.input_state.content_str().as_bytes())?;
             child.wait()?;

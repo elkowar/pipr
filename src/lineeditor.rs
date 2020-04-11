@@ -39,7 +39,12 @@ impl EditorState {
     }
 
     pub fn set_content(&mut self, new_content: &Vec<String>) {
-        self.lines = new_content.clone();
+        // prevent setting _no_ lines, which would crash
+        self.lines = if new_content.is_empty() {
+            vec![String::new()]
+        } else {
+            new_content.clone()
+        };
         self.cursor_line = self.lines.len() - 1;
         self.cursor_col = self.current_line().len();
     }
