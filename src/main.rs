@@ -89,13 +89,15 @@ where
         self.command_error = stderr;
     }
 
-    fn toggle_bookmarked(&mut self) { self.bookmarks.toggle_bookmark(self.input_state.content_to_bookmark()); }
+    fn toggle_bookmarked(&mut self) {
+        self.bookmarks.toggle_bookmark(self.input_state.content_to_bookmark());
+    }
 
     fn apply_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
-        if code == KeyCode::Up {
+        if code == KeyCode::Tab {
             self.selected_area = self.selected_area.prev_area();
             return;
-        } else if code == KeyCode::Down {
+        } else if code == KeyCode::BackTab {
             self.selected_area = self.selected_area.next_area();
             return;
         }
@@ -105,11 +107,17 @@ where
                 match code {
                     KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => self.toggle_bookmarked(),
                     KeyCode::Char('z') if modifiers.contains(KeyModifiers::CONTROL) => {
-                        self.last_unsaved.clone().map(|x| self.input_state.set_content(&x));
+                        //self.last_unsaved.clone().map(|x| self.input_state.set_content(&x));
                     }
 
                     KeyCode::Char('w') if modifiers.contains(KeyModifiers::CONTROL) => {
                         self.input_state.apply_event(le::EditorEvent::KillWordBack)
+                    }
+                    KeyCode::Char('\r') | KeyCode::Char('\n') if modifiers.contains(KeyModifiers::ALT) => {
+                        self.input_state.apply_event(le::EditorEvent::NewLine)
+                    }
+                    KeyCode::Backspace if modifiers.contains(KeyModifiers::CONTROL) => {
+                        self.input_state.apply_event(le::EditorEvent::RemoveLine)
                     }
                     KeyCode::Char(c) => self.input_state.apply_event(le::EditorEvent::NewCharacter(c)),
                     KeyCode::Backspace => self.input_state.apply_event(le::EditorEvent::Backspace),
@@ -117,6 +125,8 @@ where
 
                     KeyCode::Left => self.input_state.apply_event(le::EditorEvent::GoLeft),
                     KeyCode::Right => self.input_state.apply_event(le::EditorEvent::GoRight),
+                    KeyCode::Up => self.input_state.apply_event(le::EditorEvent::GoUp),
+                    KeyCode::Down => self.input_state.apply_event(le::EditorEvent::GoDown),
                     KeyCode::Home => self.input_state.apply_event(le::EditorEvent::Home),
                     KeyCode::End => self.input_state.apply_event(le::EditorEvent::End),
                     KeyCode::Enter => self.eval_input(),
@@ -225,7 +235,7 @@ where
 
             input_field_rect = exec_chunks[0];
 
-            let input_text = [Text::raw(format!("{}", &app.input_state.content_str()))];
+            let input_text = [Text::raw(format!("{}", &app.input_state.current_line()))];
             Paragraph::new(input_text.iter())
                 .block(make_default_block("Command", app.selected_area == UIArea::CommandInput))
                 .style(if app.autoeval_mode {

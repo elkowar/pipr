@@ -3,15 +3,20 @@ use unicode_width::*;
 
 #[derive(Debug, Clone)]
 pub struct EditorState {
-    content: String,
+    lines: Vec<String>,
+    pub cursor_line: usize,
     pub cursor_col: usize,
 }
 pub enum EditorEvent {
     NewCharacter(char),
+    NewLine,
+    RemoveLine,
     Backspace,
     Delete,
     GoLeft,
     GoRight,
+    GoUp,
+    GoDown,
     Home,
     End,
     KillWordBack,
@@ -20,29 +25,54 @@ pub enum EditorEvent {
 impl EditorState {
     pub fn new() -> EditorState {
         EditorState {
-            content: String::new(),
+            lines: vec![String::new()],
+            cursor_line: 0,
             cursor_col: 0,
         }
     }
 
-    pub fn content_to_bookmark(&self) -> Bookmark { Bookmark::new(&self.content) }
-
-    pub fn load_bookmark(&mut self, bookmark: Bookmark) { self.content = bookmark.content; }
-
-    pub fn set_content(&mut self, new_content: &str) {
-        self.content = new_content.to_owned();
-        self.cursor_col = self.content.len();
+    pub fn content_to_bookmark(&self) -> Bookmark {
+        //Bookmark::new(&self.lines)
+        unimplemented!()
     }
 
-    pub fn content_str(&self) -> String { self.content.to_owned() }
-    pub fn displayed_cursor_column(&self) -> usize { UnicodeWidthStr::width(&self.content[..self.cursor_col]) }
+    pub fn load_bookmark(&mut self, bookmark: Bookmark) {
+        //self.lines = bookmark.content;
+        unimplemented!()
+    }
+
+    pub fn set_content(&mut self, new_content: &Vec<String>) {
+        self.lines = new_content.clone();
+        self.cursor_col = self.current_line().len();
+        self.cursor_line = 0;
+    }
+
+    pub fn content_str(&self) -> String {
+        self.lines.join("").to_owned()
+    }
+
+    pub fn content_lines(&self) -> Vec<String> {
+        self.lines.to_owned()
+    }
+
+    pub fn current_line(&self) -> &str {
+        &self.lines[self.cursor_line]
+    }
+
+    fn current_line_mut(&mut self) -> &mut String {
+        &mut self.lines[self.cursor_line]
+    }
+
+    pub fn displayed_cursor_column(&self) -> usize {
+        UnicodeWidthStr::width(&self.current_line()[..self.cursor_col])
+    }
 
     fn next_char_index(&self) -> usize {
-        if self.cursor_col == self.content.len() {
+        if self.cursor_col == self.current_line().len() {
             return self.cursor_col;
         }
         let mut new_cursor = self.cursor_col + 1;
-        while let None = self.content_str().get(new_cursor..) {
+        while let None = self.current_line().get(new_cursor..) {
             new_cursor += 1;
         }
         new_cursor
@@ -53,42 +83,69 @@ impl EditorState {
             return 0;
         }
         let mut new_cursor = self.cursor_col - 1;
-        while let None = self.content_str().get(new_cursor..) {
+        while let None = self.current_line().get(new_cursor..) {
             new_cursor -= 1;
         }
         new_cursor
     }
 
+    fn goto_line(&mut self, line_nr: usize) {
+        assert!(line_nr < self.lines.len());
+        self.cursor_line = line_nr;
+        if self.cursor_col >= self.current_line().len() {
+            self.cursor_col = self.current_line().len()
+        }
+    }
+
     pub fn apply_event(&mut self, event: EditorEvent) {
         match event {
             EditorEvent::NewCharacter(c) => {
-                self.content.insert(self.cursor_col, c);
+                let cursor_col = self.cursor_col;
+                self.current_line_mut().insert(cursor_col, c);
                 self.cursor_col = self.next_char_index();
+            }
+            EditorEvent::NewLine => {
+                self.lines.insert(self.cursor_line + 1, String::new());
+                self.goto_line(self.cursor_line + 1);
+            }
+            EditorEvent::RemoveLine => {
+                if self.lines.len() > 1 {
+                    self.lines.remove(self.cursor_line);
+                    self.goto_line(self.cursor_line - 1);
+                }
             }
             EditorEvent::Backspace if self.cursor_col > 0 => {
                 let new_cursor = self.prev_char_index();
-                self.content.remove(new_cursor);
+                self.current_line_mut().remove(new_cursor);
                 self.cursor_col = new_cursor;
             }
-            EditorEvent::Delete if self.cursor_col < self.content.len() => {
-                self.content.remove(self.cursor_col);
+            EditorEvent::Delete if self.cursor_col < self.current_line().len() => {
+                let cursor_col = self.cursor_col;
+                self.current_line_mut().remove(cursor_col);
             }
             EditorEvent::GoLeft if self.cursor_col > 0 => {
                 self.cursor_col = self.prev_char_index();
             }
-            EditorEvent::GoRight if self.cursor_col < self.content.len() => {
+            EditorEvent::GoRight if self.cursor_col < self.current_line().len() => {
                 self.cursor_col = self.next_char_index();
+            }
+            EditorEvent::GoUp if self.cursor_line > 0 => {
+                self.goto_line(self.cursor_line - 1);
+            }
+            EditorEvent::GoDown if self.cursor_line < self.lines.len() - 1 => {
+                self.goto_line(self.cursor_line + 1);
             }
             EditorEvent::Home => {
                 self.cursor_col = 0;
             }
             EditorEvent::End => {
-                self.cursor_col = self.content.len();
+                self.cursor_col = self.current_line().len();
             }
-            EditorEvent::KillWordBack if !self.content.is_empty() => {
-                while let Some(c) = self.content.to_owned().get(self.prev_char_index()..self.cursor_col) {
-                    self.cursor_col = self.prev_char_index();
-                    self.content.remove(self.cursor_col);
+            EditorEvent::KillWordBack if !self.current_line().is_empty() => {
+                while let Some(c) = self.current_line().to_owned().get(self.prev_char_index()..self.cursor_col) {
+                    let cursor_col = self.prev_char_index();
+                    self.cursor_col = cursor_col;
+                    self.current_line_mut().remove(cursor_col);
                     if c == " " || c == "/" || c == "\\" || c == ":" || c == "_" || c == "-" || self.cursor_col == 0 {
                         break;
                     }
@@ -145,7 +202,7 @@ pub mod test {
     #[test]
     pub fn test_advanced() {
         let mut le = EditorState::new();
-        le.set_content("as");
+        le.set_content(&vec!["as".to_string()]);
         assert_eq!(le.content_str(), "as");
         assert_eq!(le.displayed_cursor_column(), 2 as usize);
 
@@ -153,7 +210,7 @@ pub mod test {
         assert_eq!(le.content_str(), "");
         assert_eq!(le.displayed_cursor_column(), 0 as usize);
 
-        le.set_content("as as as");
+        le.set_content(&vec!["as as as".to_string()]);
         assert_eq!(le.content_str(), "as as as");
         assert_eq!(le.displayed_cursor_column(), 8 as usize);
 
@@ -176,5 +233,50 @@ pub mod test {
 
         le.apply_event(EditorEvent::GoLeft);
         assert_eq!(le.displayed_cursor_column(), 1);
+    }
+
+    #[test]
+    pub fn test_multiline() {
+        let mut le = EditorState::new();
+
+        le.apply_event(EditorEvent::NewLine);
+        assert_eq!(le.content_lines(), vec!["", ""]);
+        assert_eq!(le.cursor_line, 1);
+
+        le.apply_event(EditorEvent::NewCharacter('a'));
+        assert_eq!(le.content_lines(), vec!["", "a"]);
+        assert_eq!(le.cursor_line, 1);
+
+        le.apply_event(EditorEvent::GoUp);
+        assert_eq!(le.content_lines(), vec!["", "a"]);
+        assert_eq!(le.cursor_line, 0);
+
+        le.apply_event(EditorEvent::GoDown);
+        assert_eq!(le.content_lines(), vec!["", "a"]);
+        assert_eq!(le.cursor_line, 1);
+
+        le.apply_event(EditorEvent::RemoveLine);
+        assert_eq!(le.content_lines(), vec![""]);
+        assert_eq!(le.cursor_line, 0);
+
+        le.set_content(&vec!["a".into(), "b".into()]);
+        assert_eq!(le.content_lines(), vec!["a", "b"]);
+        assert_eq!(le.cursor_line, 0);
+        le.apply_event(EditorEvent::RemoveLine);
+        assert_eq!(le.cursor_line, 0);
+        assert_eq!(le.content_lines(), vec!["b"]);
+
+        le.set_content(&vec!["abc".into(), "a".into()]);
+        assert_eq!(le.cursor_col, 1);
+        assert_eq!(le.cursor_line, 1);
+
+        le.apply_event(EditorEvent::GoUp);
+        assert_eq!(le.cursor_col, 1);
+        assert_eq!(le.cursor_line, 0);
+        le.apply_event(EditorEvent::End);
+        assert_eq!(le.cursor_col, 3);
+        le.apply_event(EditorEvent::GoDown);
+        assert_eq!(le.cursor_line, 1);
+        assert_eq!(le.cursor_col, 1);
     }
 }
