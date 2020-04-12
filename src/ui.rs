@@ -99,10 +99,20 @@ fn draw_input_field<B: Backend>(mut f: &mut Frame<B>, rect: Rect, app: &App) {
         }
         line
     });
+    let is_bookmarked = app.bookmarks.entries.contains(&app.input_state.content_to_commandentry());
 
     List::new(lines.map(Text::raw))
         .block(make_default_block(
-            &format!("Command{}", if app.autoeval_mode { " [Autoeval]" } else { "" }),
+            &format!(
+                "Command{}{}{}",
+                if is_bookmarked { " [Bookmarked]" } else { "" },
+                if app.autoeval_mode { " [Autoeval]" } else { "" },
+                if app.autoeval_mode && app.paranoid_history_mode {
+                    " [Paranoid]"
+                } else {
+                    ""
+                },
+            ),
             true,
         ))
         .render(&mut f, rect);

@@ -73,7 +73,7 @@ fn main() -> Result<(), failure::Error> {
     let config_path = Path::new(&home_path).join(CONFIG_DIR_RELATIVE_TO_HOME);
 
     let bookmarks = CommandList::load_from_file(config_path.join("bookmarks"), None);
-    let history = CommandList::load_from_file(config_path.join("history"), Some(200));
+    let history = CommandList::load_from_file(config_path.join("history"), Some(config.history_size));
 
     let mut app = App::new(executor, config.clone(), bookmarks, history);
     if let Some(default_value) = matches.value_of("default") {

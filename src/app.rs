@@ -8,6 +8,7 @@ use crossterm::event::{KeyCode, KeyModifiers};
 pub const HELP_TEXT: &str = "\
 F1         Show/hide help
 F2         Toggle autoeval
+F2         Toggle Paranoid history (fills up history in autoeval)
 Ctrl+B     Show/hide bookmarks
 Ctrl+S     Save bookmark
 Alt+Return Newline
@@ -36,6 +37,7 @@ pub struct App {
     pub command_output: String,
     pub command_error: String,
     pub autoeval_mode: bool,
+    pub paranoid_history_mode: bool,
     pub window_state: WindowState,
     pub bookmarks: CommandList,
     pub history: CommandList,
@@ -53,6 +55,7 @@ impl App {
             command_output: "".into(),
             command_error: "".into(),
             autoeval_mode: false,
+            paranoid_history_mode: config.paranoid_history_mode_default,
             should_quit: false,
             history_idx: None,
             executor,
@@ -92,6 +95,9 @@ impl App {
     pub fn on_cmd_output(&mut self, process_result: ProcessResult) {
         match process_result {
             ProcessResult::Ok(stdout) => {
+                if self.paranoid_history_mode {
+                    self.history.push(self.input_state.content_to_commandentry());
+                }
                 self.command_output = stdout;
                 self.command_error = String::new();
             }
@@ -110,6 +116,7 @@ impl App {
             KeyCode::Esc => self.set_should_quit(),
             KeyCode::Char('q') | KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => self.set_should_quit(),
             KeyCode::F(2) => self.autoeval_mode = !self.autoeval_mode,
+            KeyCode::F(3) => self.paranoid_history_mode = !self.paranoid_history_mode,
 
             KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
                 self.bookmarks.toggle_entry(self.input_state.content_to_commandentry());
