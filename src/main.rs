@@ -1,7 +1,6 @@
 #![feature(vec_remove_item)]
 extern crate clap;
 extern crate lazy_static;
-#[macro_use]
 extern crate num_derive;
 extern crate num_traits;
 
@@ -15,7 +14,7 @@ use std::process::{Command, Stdio};
 use tui::{backend::CrosstermBackend, Terminal};
 
 use crossterm::{
-    event::{self, Event as CEvent, KeyCode, KeyEvent, KeyModifiers},
+    event::{self, Event as CEvent},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };

@@ -21,7 +21,7 @@ impl CommandEntry {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CommandList {
     entries: Vec<CommandEntry>,
     pub file: Option<PathBuf>,
@@ -38,7 +38,7 @@ impl CommandList {
     }
 
     pub fn push(&mut self, command: CommandEntry) {
-        if !command.as_string().is_empty() {
+        if !command.as_string().is_empty() && self.entries.last() != Some(&command) {
             self.entries.push(command);
             if let Some(max_size) = self.max_size {
                 if self.len() > max_size {

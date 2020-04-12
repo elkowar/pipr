@@ -31,31 +31,44 @@ fn make_default_block(title: &str, selected: bool) -> Block {
 
 pub fn draw_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> Result<(), failure::Error> {
     let mut input_field_rect = tui::layout::Rect::new(0, 0, 0, 0);
-    terminal.draw(|mut f| {
-        let sidebar_open = app.sidebar_content != SidebarContent::Nothing;
-        let root_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Percentage(if sidebar_open { 30 } else { 0 }), Percentage(100)].as_ref())
-            .margin(1)
-            .split(f.size());
+    terminal.draw(|mut f| match &app.window_state {
+        WindowState::Main => {
+            let exec_chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Length(2 + app.input_state.content_lines().len() as u16), Percentage(100)].as_ref())
+                .split(f.size());
 
-        let exec_chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Length(2 + app.input_state.content_lines().len() as u16), Percentage(100)].as_ref())
-            .split(root_chunks[1]);
-
-        input_field_rect = exec_chunks[0];
-
-        match app.sidebar_content {
-            SidebarContent::Help => draw_shortcuts(&mut f, root_chunks[0]),
-            SidebarContent::BookmarkList => {
-                draw_bookmark_list(&mut f, root_chunks[0], app.selected_area == UIArea::BookmarkList, &app)
-            }
-            _ => {}
+            input_field_rect = exec_chunks[0];
+            draw_input_field(&mut f, input_field_rect, &app);
+            draw_outputs(&mut f, exec_chunks[1], &app.command_output, &app.command_error);
         }
+        WindowState::TextView(text) => {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Percentage(100)].as_ref())
+                .split(f.size());
 
-        draw_input_field(&mut f, input_field_rect, app.selected_area == UIArea::CommandInput, &app);
-        draw_outputs(&mut f, exec_chunks[1], &app.command_output, &app.command_error);
+            Paragraph::new([Text::raw(text)].iter())
+                .block(make_default_block("TODO SET THIS", true))
+                .render(&mut f, chunks[0]);
+        }
+        WindowState::BookmarkList(listview_state) => {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Percentage(100)].as_ref())
+                .split(f.size());
+
+            draw_command_list(&mut f, chunks[0], listview_state, "Bookmarks");
+        }
+        WindowState::HistoryList(listview_state) => {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Percentage(100)].as_ref())
+                .split(f.size());
+
+            draw_command_list(&mut f, chunks[0], listview_state, "History");
+        }
+        _ => {}
     })?;
 
     // move cursor to where it belongs.
@@ -74,17 +87,17 @@ pub fn draw_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App
     Ok(())
 }
 
-fn draw_bookmark_list<B: Backend>(mut f: &mut Frame<B>, rect: Rect, is_focused: bool, app: &App) {
+fn draw_command_list<B: Backend>(mut f: &mut Frame<B>, rect: Rect, state: &CommandListState, title: &str) {
     SelectableList::default()
-        .block(make_default_block("Bookmarks", is_focused))
-        .items(app.bookmarks.as_strings().as_slice())
-        .select(if is_focused { app.selected_bookmark_idx } else { None })
+        .block(make_default_block(title, true))
+        .items(state.list.as_strings().as_slice())
+        .select(state.selected_idx)
         .highlight_style(Style::default().modifier(Modifier::ITALIC))
         .highlight_symbol(">>")
         .render(&mut f, rect);
 }
 
-fn draw_input_field<B: Backend>(mut f: &mut Frame<B>, rect: Rect, is_focused: bool, app: &App) {
+fn draw_input_field<B: Backend>(mut f: &mut Frame<B>, rect: Rect, app: &App) {
     let lines = app.input_state.content_lines().into_iter().map(|mut line| {
         if line.len() > rect.width as usize - 5 {
             line.truncate(rect.width as usize - 5);
@@ -96,7 +109,7 @@ fn draw_input_field<B: Backend>(mut f: &mut Frame<B>, rect: Rect, is_focused: bo
     List::new(lines.map(Text::raw))
         .block(make_default_block(
             &format!("Command{}", if app.autoeval_mode { " [Autoeval]" } else { "" }),
-            is_focused,
+            true,
         ))
         .render(&mut f, rect);
 }

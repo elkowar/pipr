@@ -1,55 +1,46 @@
 use super::command_evaluation::*;
-use super::commandlist::CommandList;
+use super::commandlist::{CommandEntry, CommandList};
 use super::lineeditor::*;
 use super::pipr_config::*;
 
 use crossterm::event::{KeyCode, KeyModifiers};
 
-#[derive(PartialEq, PartialOrd, Eq, Ord, FromPrimitive, Clone, Copy, Debug)]
-pub enum UIArea {
-    CommandInput,
-    BookmarkList,
+pub struct CommandListState {
+    pub list: CommandList,
+    pub selected_idx: Option<usize>,
 }
 
-#[derive(PartialEq)]
-pub enum SidebarContent {
-    BookmarkList,
-    Help,
-    Nothing,
+pub enum WindowState {
+    Main,
+    TextView(String),
+    BookmarkList(CommandListState),
+    HistoryList(CommandListState),
 }
 
 pub struct App {
-    pub selected_area: UIArea,
     pub input_state: EditorState,
     pub command_output: String,
     pub command_error: String,
     pub autoeval_mode: bool,
+    pub window_state: WindowState,
     pub bookmarks: CommandList,
-    pub selected_bookmark_idx: Option<usize>,
+    pub history: CommandList,
+    pub history_idx: Option<usize>,
     pub executor: Executor,
     pub config: PiprConfig,
     pub should_quit: bool,
-    pub history: CommandList,
-    pub history_idx: Option<usize>,
-    pub sidebar_content: SidebarContent,
 }
 
 impl App {
     pub fn new(executor: Executor, config: PiprConfig, bookmarks: CommandList, history: CommandList) -> App {
         App {
-            selected_area: UIArea::CommandInput,
+            window_state: WindowState::Main,
             input_state: EditorState::new(),
             command_output: "".into(),
             command_error: "".into(),
             autoeval_mode: false,
-            selected_bookmark_idx: None,
             should_quit: false,
             history_idx: None,
-            sidebar_content: if config.show_help {
-                SidebarContent::Help
-            } else {
-                SidebarContent::Nothing
-            },
             executor,
             config,
             bookmarks,
@@ -88,7 +79,7 @@ impl App {
         let previous_content = self.input_state.content_str().clone();
         match code {
             KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
-                self.sidebar_content = SidebarContent::BookmarkList;
+                //self.sidebar_content = SidebarContent::BookmarkList;
                 self.bookmarks.toggle_entry(self.input_state.content_to_commandentry());
             }
             KeyCode::Char('p') if modifiers.contains(KeyModifiers::CONTROL) => self.apply_history_prev(),
@@ -135,46 +126,6 @@ impl App {
         }
     }
 
-    fn bookmarklist_event(&mut self, code: KeyCode) {
-        match code {
-            KeyCode::Down | KeyCode::Char('j') if self.bookmarks.len() > 0 => {
-                if let Some(idx) = self.selected_bookmark_idx {
-                    self.selected_bookmark_idx = Some((idx + 1) % self.bookmarks.len() as usize);
-                } else {
-                    self.selected_bookmark_idx = Some(0);
-                }
-            }
-            KeyCode::Up | KeyCode::Char('k') if self.bookmarks.len() > 0 => {
-                if let Some(idx) = self.selected_bookmark_idx {
-                    if idx > 0 {
-                        self.selected_bookmark_idx = Some((idx - 1).max(0) as usize);
-                    }
-                } else {
-                    self.selected_bookmark_idx = Some(0);
-                }
-            }
-            KeyCode::Enter => {
-                if let Some(bookmark) = self.selected_bookmark_idx.and_then(|idx| self.bookmarks.get_at(idx)).cloned() {
-                    self.input_state.load_commandentry(&bookmark);
-                }
-            }
-            KeyCode::Delete => {
-                if let Some(idx) = self.selected_bookmark_idx {
-                    self.bookmarks.remove_at(idx);
-                    if self.bookmarks.len() == 0 {
-                        self.selected_bookmark_idx = None;
-                    } else {
-                        if self.bookmarks.get_at(idx).is_none() {
-                            self.selected_bookmark_idx = Some(idx - 1);
-                        }
-                    }
-                }
-            }
-
-            _ => {}
-        }
-    }
-
     pub fn on_cmd_output(&mut self, process_result: ProcessResult) {
         match process_result {
             ProcessResult::Ok(stdout) => {
@@ -187,45 +138,79 @@ impl App {
         }
     }
 
-    pub fn on_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
+    pub fn main_window_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         match code {
             KeyCode::Esc => self.should_quit = true,
             KeyCode::Char('q') | KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => self.should_quit = true,
-
-            KeyCode::Tab | KeyCode::BackTab => {
-                self.selected_area = match self.selected_area {
-                    UIArea::CommandInput if self.sidebar_content == SidebarContent::BookmarkList => UIArea::BookmarkList,
-                    _ => UIArea::CommandInput,
-                }
-            }
             KeyCode::F(2) => self.autoeval_mode = !self.autoeval_mode,
-            KeyCode::F(1) => {
-                self.sidebar_content = match self.sidebar_content {
-                    SidebarContent::Help => SidebarContent::Nothing,
-                    _ => {
-                        self.selected_bookmark_idx = None;
-                        SidebarContent::Help
-                    }
-                }
-            }
             KeyCode::Char('b') if modifiers.contains(KeyModifiers::CONTROL) => {
-                self.sidebar_content = match self.sidebar_content {
-                    SidebarContent::BookmarkList => {
-                        self.selected_area = UIArea::CommandInput;
-                        self.selected_bookmark_idx = None;
-                        SidebarContent::Nothing
-                    }
-                    _ => {
-                        self.selected_area = UIArea::BookmarkList;
-                        SidebarContent::BookmarkList
-                    }
-                }
-            }
+                self.history.push(self.input_state.content_to_commandentry());
 
-            _ => match self.selected_area {
-                UIArea::CommandInput => self.command_input_event(code, modifiers),
-                UIArea::BookmarkList => self.bookmarklist_event(code),
+                let entries = self.bookmarks.clone();
+                self.window_state = WindowState::BookmarkList(CommandListState {
+                    selected_idx: if entries.len() == 0 { None } else { Some(0) },
+                    list: entries,
+                })
+            }
+            KeyCode::Char('h') if modifiers.contains(KeyModifiers::CONTROL) => {
+                self.history.push(self.input_state.content_to_commandentry());
+
+                let entries = self.history.clone();
+                self.window_state = WindowState::HistoryList(CommandListState {
+                    selected_idx: self.history_idx,
+                    list: entries,
+                })
+            }
+            _ => self.command_input_event(code, modifiers),
+        }
+    }
+
+    pub fn on_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
+        let window_state = &mut self.window_state;
+        match window_state {
+            WindowState::Main => self.main_window_tui_event(code, modifiers),
+            WindowState::TextView(_) => self.window_state = WindowState::Main,
+            WindowState::BookmarkList(state) => match code {
+                KeyCode::Esc => self.window_state = WindowState::Main,
+                KeyCode::Enter => {
+                    if let Some(entry) = state.selected_entry() {
+                        self.input_state.load_commandentry(entry);
+                    }
+                    self.window_state = WindowState::Main;
+                }
+                _ => state.apply_event(code),
             },
+            WindowState::HistoryList(state) => match code {
+                KeyCode::Esc => self.window_state = WindowState::Main,
+                KeyCode::Enter => {
+                    if let Some(idx) = state.selected_idx {
+                        if let Some(entry) = self.history.get_at(idx) {
+                            self.input_state.load_commandentry(entry);
+                        }
+                    }
+                    self.history_idx = state.selected_idx;
+                    self.window_state = WindowState::Main;
+                }
+                _ => state.apply_event(code),
+            },
+        }
+    }
+}
+
+impl CommandListState {
+    pub fn selected_entry(&self) -> Option<&CommandEntry> {
+        self.selected_idx.and_then(|idx| self.list.get_at(idx))
+    }
+
+    pub fn apply_event(&mut self, code: KeyCode) {
+        if let Some(selected_idx) = self.selected_idx {
+            match code {
+                KeyCode::Up | KeyCode::Char('k') if selected_idx > 0 => self.selected_idx = Some(selected_idx - 1),
+                KeyCode::Down | KeyCode::Char('j') if selected_idx < self.list.len() - 1 => {
+                    self.selected_idx = Some(selected_idx + 1)
+                }
+                _ => {}
+            }
         }
     }
 }
