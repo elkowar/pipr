@@ -141,9 +141,11 @@ impl EditorState {
                     self.current_line_mut().push_str(&removed_line);
                 }
             }
+
             EditorEvent::Clear => {
                 self.set_content(&vec![String::new()]);
             }
+
             EditorEvent::GoLeft => {
                 if self.cursor_col > 0 {
                     self.cursor_col = self.prev_char_index();
@@ -160,18 +162,11 @@ impl EditorState {
                     self.cursor_col = 0;
                 }
             }
-            EditorEvent::GoUp if self.cursor_line > 0 => {
-                self.goto_line(self.cursor_line - 1);
-            }
-            EditorEvent::GoDown if self.cursor_line < self.lines.len() - 1 => {
-                self.goto_line(self.cursor_line + 1);
-            }
-            EditorEvent::Home => {
-                self.cursor_col = 0;
-            }
-            EditorEvent::End => {
-                self.cursor_col = self.current_line().len();
-            }
+            EditorEvent::GoUp if self.cursor_line > 0 => self.goto_line(self.cursor_line - 1),
+            EditorEvent::GoDown if self.cursor_line < self.lines.len() - 1 => self.goto_line(self.cursor_line + 1),
+            EditorEvent::Home => self.cursor_col = 0,
+            EditorEvent::End => self.cursor_col = self.current_line().len(),
+
             EditorEvent::KillWordBack if !self.current_line().is_empty() => {
                 while let Some(c) = self.current_line().to_owned().get(self.prev_char_index()..self.cursor_col) {
                     let cursor_col = self.prev_char_index();

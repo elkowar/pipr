@@ -19,9 +19,6 @@ impl CommandEntry {
     pub fn as_string(&self) -> String {
         self.lines().join("\n")
     }
-    pub fn first_line(&self) -> &str {
-        &self.command[0]
-    }
 }
 
 #[derive(Debug)]
@@ -121,17 +118,3 @@ impl CommandList {
         }
     }
 }
-
-//pub fn load_file() -> Option<CommandList> {
-//let home_path = env::var("HOME").ok()?;
-//let bookmarks_path = Path::new(&home_path).join(BOOKMARKS_PATH_RELATIVE_TO_HOME);
-//}
-
-//pub fn write_to_file(bookmarks: &CommandList) {
-//let home_path = env::var("HOME").unwrap();
-//let bookmarks_path = Path::new(&home_path).join(BOOKMARKS_PATH_RELATIVE_TO_HOME);
-//DirBuilder::new()
-//.recursive(true)
-//.create(&bookmarks_path.parent().unwrap())
-//.unwrap();
-//}

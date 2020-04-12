@@ -57,14 +57,6 @@ impl App {
         }
     }
 
-    fn eval_input(&mut self) {
-        self.executor.execute(&self.input_state.content_str());
-    }
-
-    fn toggle_bookmarked(&mut self) {
-        self.bookmarks.toggle_entry(self.input_state.content_to_commandentry());
-    }
-
     fn apply_history_prev(&mut self) {
         if let Some(idx) = self.history_idx {
             if idx > 0 {
@@ -97,7 +89,7 @@ impl App {
         match code {
             KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
                 self.sidebar_content = SidebarContent::BookmarkList;
-                self.toggle_bookmarked();
+                self.bookmarks.toggle_entry(self.input_state.content_to_commandentry());
             }
             KeyCode::Char('p') if modifiers.contains(KeyModifiers::CONTROL) => self.apply_history_prev(),
             KeyCode::Char('n') if modifiers.contains(KeyModifiers::CONTROL) => self.apply_history_next(),
@@ -133,13 +125,13 @@ impl App {
                 {
                     self.history.push(self.input_state.content_to_commandentry());
                 }
-                self.eval_input();
+                self.executor.execute(&self.input_state.content_str());
             }
             _ => {}
         }
 
         if previous_content != self.input_state.content_str() && self.autoeval_mode {
-            self.eval_input();
+            self.executor.execute(&self.input_state.content_str());
         }
     }
 
@@ -210,13 +202,17 @@ impl App {
             KeyCode::F(1) => {
                 self.sidebar_content = match self.sidebar_content {
                     SidebarContent::Help => SidebarContent::Nothing,
-                    _ => SidebarContent::Help,
+                    _ => {
+                        self.selected_bookmark_idx = None;
+                        SidebarContent::Help
+                    }
                 }
             }
             KeyCode::Char('b') if modifiers.contains(KeyModifiers::CONTROL) => {
                 self.sidebar_content = match self.sidebar_content {
                     SidebarContent::BookmarkList => {
                         self.selected_area = UIArea::CommandInput;
+                        self.selected_bookmark_idx = None;
                         SidebarContent::Nothing
                     }
                     _ => {
