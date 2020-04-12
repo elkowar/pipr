@@ -5,14 +5,27 @@ use super::pipr_config::*;
 
 use crossterm::event::{KeyCode, KeyModifiers};
 
+pub const HELP_TEXT: &str = "\
+F1         Show/hide help
+F2         Toggle autoeval
+Ctrl+B     Show/hide bookmarks
+Ctrl+S     Save bookmark
+Alt+Return Newline
+Ctrl+X     Clear Command
+Ctrl+P     Previous in history
+Ctrl+N     Next in history
+
+Config file is in
+~/.config/pipr/pipr.toml";
+
 pub struct CommandListState {
-    pub list: CommandList,
+    pub list: Vec<CommandEntry>,
     pub selected_idx: Option<usize>,
 }
 
 pub enum WindowState {
     Main,
-    TextView(String),
+    TextView(String, String),
     BookmarkList(CommandListState),
     HistoryList(CommandListState),
 }
@@ -143,10 +156,17 @@ impl App {
             KeyCode::Esc => self.should_quit = true,
             KeyCode::Char('q') | KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => self.should_quit = true,
             KeyCode::F(2) => self.autoeval_mode = !self.autoeval_mode,
+            _ => self.command_input_event(code, modifiers),
+        }
+    }
+
+    pub fn on_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
+        match code {
+            KeyCode::F(1) => self.window_state = WindowState::TextView("Help".to_string(), HELP_TEXT.to_string()),
             KeyCode::Char('b') if modifiers.contains(KeyModifiers::CONTROL) => {
                 self.history.push(self.input_state.content_to_commandentry());
 
-                let entries = self.bookmarks.clone();
+                let entries = self.bookmarks.entries.clone();
                 self.window_state = WindowState::BookmarkList(CommandListState {
                     selected_idx: if entries.len() == 0 { None } else { Some(0) },
                     list: entries,
@@ -155,51 +175,49 @@ impl App {
             KeyCode::Char('h') if modifiers.contains(KeyModifiers::CONTROL) => {
                 self.history.push(self.input_state.content_to_commandentry());
 
-                let entries = self.history.clone();
+                let entries = self.history.entries.clone();
                 self.window_state = WindowState::HistoryList(CommandListState {
-                    selected_idx: self.history_idx,
+                    selected_idx: self.history_idx.or(if self.history.len() > 0 { Some(0) } else { None }),
                     list: entries,
                 })
             }
-            _ => self.command_input_event(code, modifiers),
-        }
-    }
-
-    pub fn on_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
-        let window_state = &mut self.window_state;
-        match window_state {
-            WindowState::Main => self.main_window_tui_event(code, modifiers),
-            WindowState::TextView(_) => self.window_state = WindowState::Main,
-            WindowState::BookmarkList(state) => match code {
-                KeyCode::Esc => self.window_state = WindowState::Main,
-                KeyCode::Enter => {
-                    if let Some(entry) = state.selected_entry() {
-                        self.input_state.load_commandentry(entry);
-                    }
-                    self.window_state = WindowState::Main;
-                }
-                _ => state.apply_event(code),
-            },
-            WindowState::HistoryList(state) => match code {
-                KeyCode::Esc => self.window_state = WindowState::Main,
-                KeyCode::Enter => {
-                    if let Some(idx) = state.selected_idx {
-                        if let Some(entry) = self.history.get_at(idx) {
-                            self.input_state.load_commandentry(entry);
+            _ => {
+                let window_state = &mut self.window_state;
+                match window_state {
+                    WindowState::Main => self.main_window_tui_event(code, modifiers),
+                    WindowState::TextView(_, _) => self.window_state = WindowState::Main,
+                    WindowState::BookmarkList(state) => match code {
+                        KeyCode::Esc => self.window_state = WindowState::Main,
+                        KeyCode::Enter => {
+                            if let Some(entry) = state.selected_entry() {
+                                self.input_state.load_commandentry(entry);
+                            }
+                            self.window_state = WindowState::Main;
                         }
-                    }
-                    self.history_idx = state.selected_idx;
-                    self.window_state = WindowState::Main;
+                        _ => state.apply_event(code),
+                    },
+                    WindowState::HistoryList(state) => match code {
+                        KeyCode::Esc => self.window_state = WindowState::Main,
+                        KeyCode::Enter => {
+                            if let Some(idx) = state.selected_idx {
+                                if let Some(entry) = self.history.get_at(idx) {
+                                    self.input_state.load_commandentry(entry);
+                                }
+                            }
+                            self.history_idx = state.selected_idx;
+                            self.window_state = WindowState::Main;
+                        }
+                        _ => state.apply_event(code),
+                    },
                 }
-                _ => state.apply_event(code),
-            },
+            }
         }
     }
 }
 
 impl CommandListState {
     pub fn selected_entry(&self) -> Option<&CommandEntry> {
-        self.selected_idx.and_then(|idx| self.list.get_at(idx))
+        self.selected_idx.and_then(|idx| self.list.get(idx))
     }
 
     pub fn apply_event(&mut self, code: KeyCode) {

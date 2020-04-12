@@ -23,7 +23,7 @@ impl CommandEntry {
 
 #[derive(Debug, Clone)]
 pub struct CommandList {
-    entries: Vec<CommandEntry>,
+    pub entries: Vec<CommandEntry>,
     pub file: Option<PathBuf>,
     pub max_size: Option<usize>,
 }

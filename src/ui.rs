@@ -6,19 +6,6 @@ use tui::widgets::{Block, Borders, List, Paragraph, SelectableList, Text, Widget
 use tui::{backend::Backend, backend::CrosstermBackend, Frame, Terminal};
 use Constraint::*;
 
-const HELP_TEXT: &str = "\
-F1         Show/hide help
-F2         Toggle autoeval
-Ctrl+B     Show/hide bookmarks
-Ctrl+S     Save bookmark
-Alt+Return Newline
-Ctrl+X     Clear Command
-Ctrl+P     Previous in history
-Ctrl+N     Next in history
-
-Config file is in
-~/.config/pipr/pipr.toml";
-
 fn make_default_block(title: &str, selected: bool) -> Block {
     let title_style = if selected {
         Style::default().fg(Color::Black).bg(Color::Cyan)
@@ -29,7 +16,7 @@ fn make_default_block(title: &str, selected: bool) -> Block {
     Block::default().title(title).borders(Borders::ALL).title_style(title_style)
 }
 
-pub fn draw_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> Result<(), failure::Error> {
+pub fn draw_app(mut terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> Result<(), failure::Error> {
     let mut input_field_rect = tui::layout::Rect::new(0, 0, 0, 0);
     terminal.draw(|mut f| match &app.window_state {
         WindowState::Main => {
@@ -42,55 +29,45 @@ pub fn draw_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App
             draw_input_field(&mut f, input_field_rect, &app);
             draw_outputs(&mut f, exec_chunks[1], &app.command_output, &app.command_error);
         }
-        WindowState::TextView(text) => {
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Percentage(100)].as_ref())
-                .split(f.size());
-
+        WindowState::TextView(title, text) => {
+            let rect = f.size();
             Paragraph::new([Text::raw(text)].iter())
-                .block(make_default_block("TODO SET THIS", true))
-                .render(&mut f, chunks[0]);
+                .block(make_default_block(title, true))
+                .render(&mut f, rect);
         }
         WindowState::BookmarkList(listview_state) => {
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Percentage(100)].as_ref())
-                .split(f.size());
-
-            draw_command_list(&mut f, chunks[0], listview_state, "Bookmarks");
+            let rect = f.size();
+            draw_command_list(&mut f, rect, listview_state, "Bookmarks");
         }
         WindowState::HistoryList(listview_state) => {
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Percentage(100)].as_ref())
-                .split(f.size());
-
-            draw_command_list(&mut f, chunks[0], listview_state, "History");
+            let rect = f.size();
+            draw_command_list(&mut f, rect, listview_state, "History");
         }
-        _ => {}
     })?;
 
-    // move cursor to where it belongs.
-    terminal.backend_mut().write(
-        format!(
-            "{}",
-            crossterm::cursor::MoveTo(
-                input_field_rect.x + 1 + app.input_state.displayed_cursor_column() as u16,
-                input_field_rect.y + 1 + app.input_state.cursor_line as u16,
-            )
-        )
-        .as_bytes(),
-    )?;
-    // immediately _show_ the moved cursor where it now should be
-    io::stdout().flush().ok();
+    match app.window_state {
+        WindowState::Main => {
+            set_crossterm_cursor_visibility(&mut terminal, true);
+            let cursor_x = input_field_rect.x + 1 + app.input_state.displayed_cursor_column() as u16;
+            let cursor_y = input_field_rect.y + 1 + app.input_state.cursor_line as u16;
+            set_crossterm_cursor_position(&mut terminal, cursor_x, cursor_y);
+        }
+        _ => set_crossterm_cursor_visibility(&mut terminal, false),
+    }
     Ok(())
 }
 
 fn draw_command_list<B: Backend>(mut f: &mut Frame<B>, rect: Rect, state: &CommandListState, title: &str) {
     SelectableList::default()
         .block(make_default_block(title, true))
-        .items(state.list.as_strings().as_slice())
+        .items(
+            state
+                .list
+                .iter()
+                .map(|entry| entry.as_string())
+                .collect::<Vec<String>>()
+                .as_slice(),
+        )
         .select(state.selected_idx)
         .highlight_style(Style::default().modifier(Modifier::ITALIC))
         .highlight_symbol(">>")
@@ -115,15 +92,13 @@ fn draw_input_field<B: Backend>(mut f: &mut Frame<B>, rect: Rect, app: &App) {
 }
 
 fn draw_outputs<B: Backend>(mut f: &mut Frame<B>, rect: Rect, stdout: &str, stderr: &str) {
-    let output_constraints = if stderr.is_empty() {
-        [Percentage(100)].as_ref()
-    } else {
-        [Percentage(50), Percentage(50)].as_ref()
-    };
-
     let output_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints(output_constraints)
+        .constraints(if stderr.is_empty() {
+            [Percentage(100)].as_ref()
+        } else {
+            [Percentage(50), Percentage(50)].as_ref()
+        })
         .split(rect);
 
     Paragraph::new([Text::raw(stdout)].iter())
@@ -137,8 +112,19 @@ fn draw_outputs<B: Backend>(mut f: &mut Frame<B>, rect: Rect, stdout: &str, stde
     }
 }
 
-fn draw_shortcuts<B: Backend>(mut f: &mut Frame<B>, rect: Rect) {
-    Paragraph::new([Text::raw(HELP_TEXT)].iter())
-        .block(make_default_block("Help", false))
-        .render(&mut f, rect);
+fn set_crossterm_cursor_position(terminal: &mut Terminal<CrosstermBackend<Stdout>>, x: u16, y: u16) {
+    terminal
+        .backend_mut()
+        .write(format!("{}", crossterm::cursor::MoveTo(x, y)).as_bytes())
+        .unwrap();
+    io::stdout().flush().ok();
+}
+
+fn set_crossterm_cursor_visibility(terminal: &mut Terminal<CrosstermBackend<Stdout>>, visible: bool) {
+    let command = match visible {
+        true => format!("{}", crossterm::cursor::Show),
+        false => format!("{}", crossterm::cursor::Hide),
+    };
+    terminal.backend_mut().write(command.as_bytes()).unwrap();
+    io::stdout().flush().ok();
 }
