@@ -11,7 +11,6 @@ use crossterm::event::{KeyCode, KeyModifiers};
 #[derive(PartialEq, PartialOrd, Eq, Ord, FromPrimitive, Clone, Copy, Debug)]
 pub enum UIArea {
     CommandInput,
-    Config,
     BookmarkList,
 }
 
@@ -102,6 +101,7 @@ impl App {
     fn command_input_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         let previous_content = self.input_state.content_str().clone();
         match code {
+            KeyCode::F(1) => self.autoeval_mode = !self.autoeval_mode,
             KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => self.toggle_bookmarked(),
             KeyCode::Char('p') if modifiers.contains(KeyModifiers::CONTROL) => self.apply_history_prev(),
             KeyCode::Char('n') if modifiers.contains(KeyModifiers::CONTROL) => self.apply_history_next(),
@@ -139,13 +139,6 @@ impl App {
 
         if previous_content != self.input_state.content_str() && self.autoeval_mode {
             self.eval_input();
-        }
-    }
-
-    fn config_event(&mut self, code: KeyCode) {
-        match code {
-            KeyCode::Enter => self.autoeval_mode = !self.autoeval_mode,
-            _ => {}
         }
     }
 
@@ -187,16 +180,13 @@ impl App {
     }
 
     pub fn apply_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
-        if code == KeyCode::Tab {
-            self.selected_area = self.selected_area.next_area();
-        } else if code == KeyCode::BackTab {
-            self.selected_area = self.selected_area.prev_area();
-        } else {
-            match self.selected_area {
+        match code {
+            KeyCode::Tab => self.selected_area = self.selected_area.next_area(),
+            KeyCode::BackTab => self.selected_area = self.selected_area.prev_area(),
+            _ => match self.selected_area {
                 UIArea::CommandInput => self.command_input_event(code, modifiers),
-                UIArea::Config => self.config_event(code),
                 UIArea::BookmarkList => self.bookmarklist_event(code),
-            }
+            },
         }
     }
 }

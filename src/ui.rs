@@ -21,7 +21,7 @@ pub fn draw_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App
     terminal.draw(|mut f| {
         let root_chunks = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Percentage(20), Percentage(80)].as_ref())
+            .constraints([Percentage(40), Percentage(80)].as_ref())
             .margin(1)
             .split(f.size());
 
@@ -39,10 +39,10 @@ pub fn draw_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App
 
         input_field_rect = exec_chunks[0];
 
-        draw_bookmark_list(&mut f, root_chunks[0], &app);
-        draw_input_field(&mut f, input_field_rect, &app);
+        draw_bookmark_list(&mut f, root_chunks[0], app.selected_area == UIArea::BookmarkList, &app);
+        draw_input_field(&mut f, input_field_rect, app.selected_area == UIArea::CommandInput, &app);
         draw_outputs(&mut f, exec_chunks[2], &app.command_output, &app.command_error);
-        draw_config(&mut f, exec_chunks[1], app.selected_area, app.autoeval_mode);
+        draw_shortcuts(&mut f, exec_chunks[1], app.autoeval_mode);
     })?;
 
     // move cursor to where it belongs.
@@ -61,29 +61,25 @@ pub fn draw_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App
     Ok(())
 }
 
-fn draw_bookmark_list<B: Backend>(mut f: &mut Frame<B>, rect: Rect, app: &App) {
+fn draw_bookmark_list<B: Backend>(mut f: &mut Frame<B>, rect: Rect, is_focused: bool, app: &App) {
     SelectableList::default()
-        .block(make_default_block("Bookmarks", app.selected_area == UIArea::BookmarkList))
+        .block(make_default_block("Bookmarks", is_focused))
         .items(app.bookmarks.as_strings().as_slice())
-        .select(if app.selected_area == UIArea::BookmarkList {
-            app.selected_bookmark_idx
-        } else {
-            None
-        })
+        .select(if is_focused { app.selected_bookmark_idx } else { None })
         .highlight_style(Style::default().modifier(Modifier::ITALIC))
         .highlight_symbol(">>")
         .render(&mut f, rect);
 }
 
-fn draw_input_field<B: Backend>(mut f: &mut Frame<B>, rect: Rect, app: &App) {
+fn draw_input_field<B: Backend>(mut f: &mut Frame<B>, rect: Rect, is_focused: bool, app: &App) {
     let command_input_style = if app.autoeval_mode {
         Style::default().fg(Color::Red)
     } else {
         Style::default()
     };
 
-    List::new(app.input_state.content_lines().iter().map(|l| Text::raw(l)))
-        .block(make_default_block("Command", app.selected_area == UIArea::CommandInput).style(command_input_style))
+    List::new(app.input_state.content_lines().iter().map(Text::raw))
+        .block(make_default_block("Command", is_focused).title_style(command_input_style))
         .render(&mut f, rect);
 }
 
@@ -110,14 +106,11 @@ fn draw_outputs<B: Backend>(mut f: &mut Frame<B>, rect: Rect, stdout: &str, stde
     }
 }
 
-fn draw_config<B: Backend>(mut f: &mut Frame<B>, rect: Rect, selected_area: UIArea, autoeval_mode: bool) {
-    let config_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Percentage(50), Percentage(50)].as_ref())
-        .split(rect);
-
+fn draw_shortcuts<B: Backend>(mut f: &mut Frame<B>, rect: Rect, autoeval_mode: bool) {
     let immediate_eval_state = if autoeval_mode { "Active" } else { "Inactive" };
-    Paragraph::new([Text::raw(immediate_eval_state)].iter())
-        .block(make_default_block("Immediate eval", selected_area == UIArea::Config))
-        .render(&mut f, config_chunks[0]);
+    let mappings = vec![format!("F1: Toggle autoeval ({})", immediate_eval_state)];
+    let mappings = mappings.join("\t");
+    Paragraph::new([Text::raw(mappings)].iter())
+        .block(make_default_block("Immediate eval", false))
+        .render(&mut f, rect);
 }
