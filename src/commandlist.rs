@@ -24,6 +24,7 @@ impl CommandEntry {
     }
 }
 
+#[derive(Debug)]
 pub struct CommandList {
     entries: Vec<CommandEntry>,
     pub file: Option<PathBuf>,
@@ -57,6 +58,9 @@ impl CommandList {
     pub fn len(&self) -> usize {
         self.entries.len()
     }
+    pub fn remove_at(&mut self, idx: usize) {
+        self.entries.remove(idx);
+    }
     pub fn remove_entry(&mut self, entry: &CommandEntry) {
         self.entries.remove_item(&entry);
         self.write_to_file();
@@ -77,7 +81,7 @@ impl CommandList {
     pub fn deserialize(path: Option<PathBuf>, max_size: Option<usize>, lines: &str) -> CommandList {
         let mut entries = CommandList::new(path, max_size);
         let mut current_entry = Vec::new();
-        for line in lines.lines() {
+        for line in lines.lines().filter(|x| !x.is_empty()) {
             if line == "---" {
                 entries.push(CommandEntry::new(&current_entry));
                 current_entry = Vec::new();
@@ -85,7 +89,9 @@ impl CommandList {
                 current_entry.push(line.to_owned());
             }
         }
-        entries.push(CommandEntry::new(&current_entry)); // add last started bookmark
+        if !current_entry.is_empty() {
+            entries.push(CommandEntry::new(&current_entry)); // add last started bookmark
+        }
 
         // remove entries to fit into max_size
         if let Some(max_size) = max_size {

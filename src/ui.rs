@@ -21,7 +21,7 @@ pub fn draw_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App
     terminal.draw(|mut f| {
         let root_chunks = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Percentage(40), Percentage(80)].as_ref())
+            .constraints([Percentage(if app.bookmarks_visible { 30 } else { 0 }), Percentage(80)].as_ref())
             .margin(1)
             .split(f.size());
 
@@ -72,14 +72,8 @@ fn draw_bookmark_list<B: Backend>(mut f: &mut Frame<B>, rect: Rect, is_focused: 
 }
 
 fn draw_input_field<B: Backend>(mut f: &mut Frame<B>, rect: Rect, is_focused: bool, app: &App) {
-    let command_input_style = if app.autoeval_mode {
-        Style::default().fg(Color::Red)
-    } else {
-        Style::default()
-    };
-
     List::new(app.input_state.content_lines().iter().map(Text::raw))
-        .block(make_default_block("Command", is_focused).title_style(command_input_style))
+        .block(make_default_block("Command", is_focused))
         .render(&mut f, rect);
 }
 

@@ -3,8 +3,6 @@ use super::commandlist::CommandList;
 use super::lineeditor as le;
 use super::pipr_config::*;
 use num_traits::FromPrimitive;
-use std::env;
-use std::path::{Path, PathBuf};
 
 use crossterm::event::{KeyCode, KeyModifiers};
 
@@ -43,6 +41,7 @@ pub struct App {
     pub should_quit: bool,
     pub history: CommandList,
     pub history_idx: Option<usize>,
+    pub bookmarks_visible: bool,
 }
 
 impl App {
@@ -56,6 +55,7 @@ impl App {
             selected_bookmark_idx: None,
             should_quit: false,
             history_idx: None,
+            bookmarks_visible: true,
             executor,
             config,
             bookmarks,
@@ -102,6 +102,7 @@ impl App {
         let previous_content = self.input_state.content_str().clone();
         match code {
             KeyCode::F(1) => self.autoeval_mode = !self.autoeval_mode,
+            KeyCode::Char('b') if modifiers.contains(KeyModifiers::CONTROL) => self.bookmarks_visible = !self.bookmarks_visible,
             KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => self.toggle_bookmarked(),
             KeyCode::Char('p') if modifiers.contains(KeyModifiers::CONTROL) => self.apply_history_prev(),
             KeyCode::Char('n') if modifiers.contains(KeyModifiers::CONTROL) => self.apply_history_next(),
@@ -144,16 +145,18 @@ impl App {
 
     fn bookmarklist_event(&mut self, code: KeyCode) {
         match code {
-            KeyCode::Down | KeyCode::Char('j') => {
+            KeyCode::Down | KeyCode::Char('j') if self.bookmarks.len() > 0 => {
                 if let Some(idx) = self.selected_bookmark_idx {
                     self.selected_bookmark_idx = Some((idx + 1) % self.bookmarks.len() as usize);
                 } else {
                     self.selected_bookmark_idx = Some(0);
                 }
             }
-            KeyCode::Up | KeyCode::Char('k') => {
+            KeyCode::Up | KeyCode::Char('k') if self.bookmarks.len() > 0 => {
                 if let Some(idx) = self.selected_bookmark_idx {
-                    self.selected_bookmark_idx = Some((idx - 1).max(0) as usize);
+                    if idx > 0 {
+                        self.selected_bookmark_idx = Some((idx - 1).max(0) as usize);
+                    }
                 } else {
                     self.selected_bookmark_idx = Some(0);
                 }
@@ -163,6 +166,19 @@ impl App {
                     self.input_state.load_commandentry(&bookmark);
                 }
             }
+            KeyCode::Delete => {
+                if let Some(idx) = self.selected_bookmark_idx {
+                    self.bookmarks.remove_at(idx);
+                    if self.bookmarks.len() == 0 {
+                        self.selected_bookmark_idx = None;
+                    } else {
+                        if self.bookmarks.get_at(idx).is_none() {
+                            self.selected_bookmark_idx = Some(idx - 1);
+                        }
+                    }
+                }
+            }
+
             _ => {}
         }
     }
