@@ -1,4 +1,5 @@
 use super::commandlist::*;
+use crossterm::event::{KeyCode, KeyModifiers};
 use unicode_width::*;
 
 #[derive(Debug, Clone)]
@@ -20,6 +21,26 @@ pub enum EditorEvent {
     Home,
     End,
     KillWordBack,
+}
+
+pub fn convert_keyevent_to_editorevent(code: KeyCode, modifiers: KeyModifiers) -> Option<EditorEvent> {
+    match code {
+        KeyCode::Left => Some(EditorEvent::GoLeft),
+        KeyCode::Right => Some(EditorEvent::GoRight),
+        KeyCode::Up => Some(EditorEvent::GoUp),
+        KeyCode::Down => Some(EditorEvent::GoDown),
+        KeyCode::Home => Some(EditorEvent::Home),
+        KeyCode::End => Some(EditorEvent::End),
+        KeyCode::Char('a') if modifiers.contains(KeyModifiers::CONTROL) => Some(EditorEvent::Home),
+        KeyCode::Char('e') if modifiers.contains(KeyModifiers::CONTROL) => Some(EditorEvent::End),
+        KeyCode::Char('x') if modifiers.contains(KeyModifiers::CONTROL) => Some(EditorEvent::Clear),
+        KeyCode::Char('w') if modifiers.contains(KeyModifiers::CONTROL) => Some(EditorEvent::KillWordBack),
+        KeyCode::Char('\r') | KeyCode::Char('\n') if modifiers.contains(KeyModifiers::ALT) => Some(EditorEvent::NewLine),
+        KeyCode::Char(c) => Some(EditorEvent::NewCharacter(c)),
+        KeyCode::Backspace => Some(EditorEvent::Backspace),
+        KeyCode::Delete => Some(EditorEvent::Delete),
+        _ => None,
+    }
 }
 
 impl EditorState {

@@ -89,57 +89,6 @@ impl App {
         }
     }
 
-    fn command_input_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
-        let previous_content = self.input_state.content_str().clone();
-        match code {
-            KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
-                //self.sidebar_content = SidebarContent::BookmarkList;
-                self.bookmarks.toggle_entry(self.input_state.content_to_commandentry());
-            }
-            KeyCode::Char('p') if modifiers.contains(KeyModifiers::CONTROL) => self.apply_history_prev(),
-            KeyCode::Char('n') if modifiers.contains(KeyModifiers::CONTROL) => self.apply_history_next(),
-
-            KeyCode::Left => self.input_state.apply_event(EditorEvent::GoLeft),
-            KeyCode::Right => self.input_state.apply_event(EditorEvent::GoRight),
-            KeyCode::Up => self.input_state.apply_event(EditorEvent::GoUp),
-            KeyCode::Down => self.input_state.apply_event(EditorEvent::GoDown),
-            KeyCode::Home => self.input_state.apply_event(EditorEvent::Home),
-            KeyCode::End => self.input_state.apply_event(EditorEvent::End),
-            KeyCode::Char('a') if modifiers.contains(KeyModifiers::CONTROL) => self.input_state.apply_event(EditorEvent::Home),
-            KeyCode::Char('e') if modifiers.contains(KeyModifiers::CONTROL) => self.input_state.apply_event(EditorEvent::End),
-
-            KeyCode::Char('x') if modifiers.contains(KeyModifiers::CONTROL) => {
-                self.history.push(self.input_state.content_to_commandentry());
-                self.input_state.apply_event(EditorEvent::Clear);
-            }
-            KeyCode::Char('w') if modifiers.contains(KeyModifiers::CONTROL) => {
-                self.input_state.apply_event(EditorEvent::KillWordBack)
-            }
-            KeyCode::Char('\r') | KeyCode::Char('\n') if modifiers.contains(KeyModifiers::ALT) => {
-                self.input_state.apply_event(EditorEvent::NewLine)
-            }
-
-            KeyCode::Char(c) => self.input_state.apply_event(EditorEvent::NewCharacter(c)),
-            KeyCode::Backspace => self.input_state.apply_event(EditorEvent::Backspace),
-            KeyCode::Delete => self.input_state.apply_event(EditorEvent::Delete),
-
-            KeyCode::Enter => {
-                if (self.history.len() == 0
-                    || self.history.get_at(self.history.len() - 1) != Some(&self.input_state.content_to_commandentry()))
-                    && !self.input_state.content_str().is_empty()
-                {
-                    self.history.push(self.input_state.content_to_commandentry());
-                }
-                self.executor.execute(&self.input_state.content_str());
-            }
-            _ => {}
-        }
-
-        if previous_content != self.input_state.content_str() && self.autoeval_mode {
-            self.executor.execute(&self.input_state.content_str());
-        }
-    }
-
     pub fn on_cmd_output(&mut self, process_result: ProcessResult) {
         match process_result {
             ProcessResult::Ok(stdout) => {
@@ -157,7 +106,37 @@ impl App {
             KeyCode::Esc => self.should_quit = true,
             KeyCode::Char('q') | KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => self.should_quit = true,
             KeyCode::F(2) => self.autoeval_mode = !self.autoeval_mode,
-            _ => self.command_input_event(code, modifiers),
+
+            KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
+                self.bookmarks.toggle_entry(self.input_state.content_to_commandentry());
+            }
+            KeyCode::Char('p') if modifiers.contains(KeyModifiers::CONTROL) => self.apply_history_prev(),
+            KeyCode::Char('n') if modifiers.contains(KeyModifiers::CONTROL) => self.apply_history_next(),
+            KeyCode::Char('x') if modifiers.contains(KeyModifiers::CONTROL) => {
+                self.history.push(self.input_state.content_to_commandentry());
+                self.input_state.apply_event(EditorEvent::Clear);
+            }
+
+            KeyCode::Enter => {
+                if (self.history.len() == 0
+                    || self.history.get_at(self.history.len() - 1) != Some(&self.input_state.content_to_commandentry()))
+                    && !self.input_state.content_str().is_empty()
+                {
+                    self.history.push(self.input_state.content_to_commandentry());
+                }
+                self.executor.execute(&self.input_state.content_str());
+            }
+
+            _ => {
+                if let Some(editor_event) = convert_keyevent_to_editorevent(code, modifiers) {
+                    let previous_content = self.input_state.content_str().clone();
+                    self.input_state.apply_event(editor_event);
+
+                    if previous_content != self.input_state.content_str() && self.autoeval_mode {
+                        self.executor.execute(&self.input_state.content_str());
+                    }
+                }
+            }
         }
     }
 
@@ -249,6 +228,7 @@ impl CommandListState {
                         self.selected_idx = Some(selected_idx - 1);
                     }
                 }
+
                 _ => {}
             }
         }
