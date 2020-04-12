@@ -8,9 +8,9 @@ use Constraint::*;
 
 fn make_default_block(title: &str, selected: bool) -> Block {
     let title_style = if selected {
-        Style::default().fg(Color::Black).bg(Color::White)
+        Style::default().fg(Color::Black).bg(Color::Cyan)
     } else {
-        Style::default().fg(Color::White).bg(Color::Black)
+        Style::default().fg(Color::Cyan).bg(Color::Black)
     };
 
     Block::default().title(title).borders(Borders::ALL).title_style(title_style)
@@ -72,8 +72,19 @@ fn draw_bookmark_list<B: Backend>(mut f: &mut Frame<B>, rect: Rect, is_focused: 
 }
 
 fn draw_input_field<B: Backend>(mut f: &mut Frame<B>, rect: Rect, is_focused: bool, app: &App) {
-    List::new(app.input_state.content_lines().iter().map(Text::raw))
-        .block(make_default_block("Command", is_focused))
+    let lines = app.input_state.content_lines().into_iter().map(|mut line| {
+        if line.len() > rect.width as usize - 5 {
+            line.truncate(rect.width as usize - 5);
+            line.push_str("...");
+        }
+        line
+    });
+
+    List::new(lines.map(Text::raw))
+        .block(make_default_block(
+            &format!("Command{}", if app.autoeval_mode { " [Autoeval]" } else { "" }),
+            is_focused,
+        ))
         .render(&mut f, rect);
 }
 
@@ -102,8 +113,12 @@ fn draw_outputs<B: Backend>(mut f: &mut Frame<B>, rect: Rect, stdout: &str, stde
 
 fn draw_shortcuts<B: Backend>(mut f: &mut Frame<B>, rect: Rect, autoeval_mode: bool) {
     let immediate_eval_state = if autoeval_mode { "Active" } else { "Inactive" };
-    let mappings = vec![format!("F1: Toggle autoeval ({})", immediate_eval_state)];
-    let mappings = mappings.join("\t");
+    let mappings = vec![
+        format!("F1: Toggle autoeval ({})", immediate_eval_state),
+        "Ctrl+B: Show/hide bookmarks".into(),
+        "Ctrl+S: Toggle bookmark".into(),
+    ];
+    let mappings = mappings.join(" | ");
     Paragraph::new([Text::raw(mappings)].iter())
         .block(make_default_block("Immediate eval", false))
         .render(&mut f, rect);
