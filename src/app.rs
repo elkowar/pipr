@@ -195,8 +195,11 @@ impl App {
         }
     }
 
-    pub fn apply_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
+    pub fn on_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         match code {
+            KeyCode::Esc => self.should_quit = true,
+            KeyCode::Char('q') | KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => self.should_quit = true,
+
             KeyCode::Tab | KeyCode::BackTab => {
                 self.selected_area = match self.selected_area {
                     UIArea::CommandInput if self.sidebar_content == SidebarContent::BookmarkList => UIArea::BookmarkList,

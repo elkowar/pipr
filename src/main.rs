@@ -126,16 +126,9 @@ fn run_app(mut app: &mut App) -> Result<(), failure::Error> {
 
             if let Ok(true) = event::poll(std::time::Duration::from_millis(100)) {
                 match event::read()? {
-                    CEvent::Key(KeyEvent { code, modifiers }) => {
-                        match code {
-                            KeyCode::Esc => app.should_quit = true,
-                            KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => app.should_quit = true,
-                            KeyCode::Char('d') if modifiers.contains(KeyModifiers::CONTROL) => app.should_quit = true,
-                            _ => app.apply_event(code, modifiers),
-                        }
-                        break;
-                    }
-                    CEvent::Resize(_, _) => {
+                    CEvent::Resize(_, _) => break,
+                    CEvent::Key(evt) => {
+                        app.on_tui_event(evt.code, evt.modifiers);
                         break;
                     }
                     _ => {}
