@@ -1,4 +1,4 @@
-use super::bookmark::*;
+use super::commandlist::*;
 use unicode_width::*;
 
 #[derive(Debug, Clone)]
@@ -30,12 +30,12 @@ impl EditorState {
         }
     }
 
-    pub fn content_to_bookmark(&self) -> Bookmark {
-        Bookmark::new(&self.lines)
+    pub fn content_to_commandentry(&self) -> CommandEntry {
+        CommandEntry::new(&self.lines)
     }
 
-    pub fn load_bookmark(&mut self, bookmark: &Bookmark) {
-        self.set_content(&bookmark.lines());
+    pub fn load_commandentry(&mut self, entry: &CommandEntry) {
+        self.set_content(&entry.lines());
     }
 
     pub fn set_content(&mut self, new_content: &Vec<String>) {

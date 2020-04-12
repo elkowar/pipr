@@ -1,8 +1,10 @@
-use super::bookmark::BookmarkList;
 use super::command_evaluation::*;
+use super::commandlist::CommandList;
 use super::lineeditor as le;
 use super::pipr_config::*;
 use num_traits::FromPrimitive;
+use std::env;
+use std::path::{Path, PathBuf};
 
 use crossterm::event::{KeyCode, KeyModifiers};
 
@@ -35,28 +37,30 @@ pub struct App {
     pub command_output: String,
     pub command_error: String,
     pub autoeval_mode: bool,
-    pub bookmarks: BookmarkList,
-    pub last_unsaved: Option<String>,
+    pub bookmarks: CommandList,
     pub selected_bookmark_idx: Option<usize>,
     pub executor: Executor,
     pub config: PiprConfig,
     pub should_quit: bool,
+    pub history: CommandList,
+    pub history_idx: Option<usize>,
 }
 
 impl App {
-    pub fn new(executor: Executor, config: PiprConfig) -> App {
+    pub fn new(executor: Executor, config: PiprConfig, bookmarks: CommandList, history: CommandList) -> App {
         App {
             selected_area: UIArea::CommandInput,
             input_state: le::EditorState::new(),
             command_output: "".into(),
             command_error: "".into(),
             autoeval_mode: false,
-            bookmarks: BookmarkList::new(),
-            last_unsaved: None,
             selected_bookmark_idx: None,
             should_quit: false,
+            history_idx: None,
             executor,
             config,
+            bookmarks,
+            history,
         }
     }
 
@@ -65,13 +69,42 @@ impl App {
     }
 
     fn toggle_bookmarked(&mut self) {
-        self.bookmarks.toggle_bookmark(self.input_state.content_to_bookmark());
+        self.bookmarks.toggle_entry(self.input_state.content_to_commandentry());
+    }
+
+    fn apply_history_prev(&mut self) {
+        if let Some(idx) = self.history_idx {
+            if idx > 0 {
+                self.history_idx = Some(idx - 1);
+                self.input_state.load_commandentry(&self.history.get_at(idx - 1).unwrap());
+            }
+        } else if self.history.len() > 0 {
+            let new_idx = self.history.len() - 1;
+            self.history_idx = Some(new_idx);
+            self.history.push(self.input_state.content_to_commandentry());
+            self.input_state.load_commandentry(&self.history.get_at(new_idx).unwrap());
+        }
+    }
+
+    fn apply_history_next(&mut self) {
+        if let Some(idx) = self.history_idx {
+            let new_idx = idx + 1;
+            if new_idx < self.history.len() - 1 {
+                self.history_idx = Some(new_idx);
+                self.input_state.load_commandentry(&self.history.get_at(new_idx).unwrap());
+            } else {
+                self.history_idx = None;
+                self.input_state.set_content(&vec![String::new()]);
+            }
+        }
     }
 
     fn command_input_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         let previous_content = self.input_state.content_str().clone();
         match code {
             KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => self.toggle_bookmarked(),
+            KeyCode::Char('p') if modifiers.contains(KeyModifiers::CONTROL) => self.apply_history_prev(),
+            KeyCode::Char('n') if modifiers.contains(KeyModifiers::CONTROL) => self.apply_history_next(),
             KeyCode::Char('z') if modifiers.contains(KeyModifiers::CONTROL) => {
                 //self.last_unsaved.clone().map(|x| self.input_state.set_content(&x));
             }
@@ -92,7 +125,15 @@ impl App {
             KeyCode::Down => self.input_state.apply_event(le::EditorEvent::GoDown),
             KeyCode::Home => self.input_state.apply_event(le::EditorEvent::Home),
             KeyCode::End => self.input_state.apply_event(le::EditorEvent::End),
-            KeyCode::Enter => self.eval_input(),
+            KeyCode::Enter => {
+                if (self.history.len() == 0
+                    || self.history.get_at(self.history.len() - 1) != Some(&self.input_state.content_to_commandentry()))
+                    && !self.input_state.content_str().is_empty()
+                {
+                    self.history.push(self.input_state.content_to_commandentry());
+                }
+                self.eval_input();
+            }
             _ => {}
         }
 
@@ -114,7 +155,6 @@ impl App {
                 if let Some(idx) = self.selected_bookmark_idx {
                     self.selected_bookmark_idx = Some((idx + 1) % self.bookmarks.len() as usize);
                 } else {
-                    self.last_unsaved = Some(self.input_state.content_str());
                     self.selected_bookmark_idx = Some(0);
                 }
             }
@@ -122,17 +162,12 @@ impl App {
                 if let Some(idx) = self.selected_bookmark_idx {
                     self.selected_bookmark_idx = Some((idx - 1).max(0) as usize);
                 } else {
-                    self.last_unsaved = Some(self.input_state.content_str());
                     self.selected_bookmark_idx = Some(0);
                 }
             }
             KeyCode::Enter => {
-                if let Some(bookmark) = self
-                    .selected_bookmark_idx
-                    .and_then(|idx| self.bookmarks.bookmark_at(idx))
-                    .cloned()
-                {
-                    self.input_state.load_bookmark(&bookmark);
+                if let Some(bookmark) = self.selected_bookmark_idx.and_then(|idx| self.bookmarks.get_at(idx)).cloned() {
+                    self.input_state.load_commandentry(&bookmark);
                 }
             }
             _ => {}

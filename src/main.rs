@@ -7,10 +7,11 @@ extern crate num_traits;
 
 use clap::Arg;
 use itertools::Itertools;
+use std::env;
 use std::io::Write;
 use std::io::{self, Read};
+use std::path::Path;
 use std::process::{Command, Stdio};
-
 use tui::{backend::CrosstermBackend, Terminal};
 
 use crossterm::{
@@ -20,15 +21,15 @@ use crossterm::{
 };
 
 pub mod app;
-pub mod bookmark;
 pub mod command_evaluation;
+pub mod commandlist;
 pub mod lineeditor;
 pub mod pipr_config;
 pub mod ui;
 
 pub use app::*;
-pub use bookmark::BookmarkList;
 pub use command_evaluation::*;
+pub use commandlist::CommandList;
 pub use lineeditor as le;
 pub use pipr_config::*;
 
@@ -67,13 +68,28 @@ fn main() -> Result<(), failure::Error> {
     let config = PiprConfig::load_from_file();
 
     let executor = Executor::start_executor(execution_mode);
-    let mut app = App::new(executor, config.clone());
+
+    pub const CONFIG_DIR_RELATIVE_TO_HOME: &'static str = ".config/pipr/";
+    let home_path = env::var("HOME").unwrap();
+    let config_path = Path::new(&home_path).join(CONFIG_DIR_RELATIVE_TO_HOME);
+
+    let bookmarks = CommandList::load_from_file(config_path.join("bookmarks"), None);
+    let history = CommandList::load_from_file(config_path.join("history"), Some(200));
+
+    let mut app = App::new(executor, config.clone(), bookmarks, history);
     if let Some(default_value) = matches.value_of("default") {
         app.input_state.set_content(&default_value.lines().map_into().collect());
     }
+
     run_app(&mut app)?;
 
-    if let Some(finish_hook) = config.finish_hook {
+    after_finish(&app)?;
+
+    Ok(())
+}
+
+fn after_finish(app: &App) -> Result<(), failure::Error> {
+    if let Some(finish_hook) = &app.config.finish_hook {
         let finish_hook = finish_hook.split(" ").collect::<Vec<&str>>();
         if let Some(cmd) = finish_hook.first() {
             let mut command = Command::new(cmd);
@@ -88,14 +104,10 @@ fn main() -> Result<(), failure::Error> {
     }
 
     println!("{}", app.input_state.content_str());
-
     Ok(())
 }
 
 fn run_app(mut app: &mut App) -> Result<(), failure::Error> {
-    let bookmarks = bookmark::load_file().unwrap_or(BookmarkList::new());
-    app.bookmarks = bookmarks;
-
     let mut stdout = io::stdout();
     #[allow(deprecated)]
     execute!(stdout, EnterAlternateScreen)?;
