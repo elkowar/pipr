@@ -55,18 +55,18 @@ fn main() -> Result<(), failure::Error> {
         return Ok(());
     }
 
+    let config = PiprConfig::load_from_file();
+
     let bubblewrap_available = which::which("bwrap").is_ok();
     let execution_mode = match matches.is_present("no-isolation") {
         true => ExecutionMode::UNSAFE,
-        false => ExecutionMode::ISOLATED,
+        false => ExecutionMode::ISOLATED(config.isolation_mounts_readonly.clone()),
     };
 
-    if !bubblewrap_available && execution_mode == ExecutionMode::ISOLATED {
+    if !bubblewrap_available && execution_mode != ExecutionMode::UNSAFE {
         println!("bubblewrap installation not found. Please make sure you have `bwrap` on your path, or supply --no-isolation to disable safe-mode");
         std::process::exit(1);
     }
-
-    let config = PiprConfig::load_from_file();
 
     let executor = Executor::start_executor(execution_mode);
 

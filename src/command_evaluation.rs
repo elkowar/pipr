@@ -3,10 +3,10 @@ use std::str;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
-#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum ExecutionMode {
     UNSAFE,
-    ISOLATED,
+    ISOLATED(Vec<(String, String)>),
 }
 
 pub struct Executor {
@@ -28,7 +28,7 @@ impl Executor {
         let (stop_send, stop_receive) = mpsc::channel::<()>();
 
         let executor = Executor {
-            execution_mode,
+            execution_mode: execution_mode.clone(),
             cmd_in_send,
             cmd_out_receive,
             stop_send,
@@ -96,17 +96,19 @@ fn start_command(execution_mode: &ExecutionMode, cmd: &str) -> Result<Child, &'s
     }
     match execution_mode {
         ExecutionMode::UNSAFE => Ok(run_cmd_unsafe(cmd)),
-        ExecutionMode::ISOLATED => Ok(run_cmd_isolated(cmd)),
+        ExecutionMode::ISOLATED(mounts) => Ok(run_cmd_isolated(mounts, cmd)),
     }
 }
 
-fn run_cmd_isolated(cmd: &str) -> Child {
+fn run_cmd_isolated(mounts: &Vec<(String, String)>, cmd: &str) -> Child {
     let args = "--ro-bind ./ /working_directory --chdir /working_directory \
-                --ro-bind /lib /lib --ro-bind /usr /usr --ro-bind /lib64 /lib64 --ro-bind /bin /bin \
-                --tmpfs /tmp --proc /proc --dev /dev --ro-bind /etc /etc --die-with-parent --share-net --unshare-pid";
+                --tmpfs /tmp --proc /proc --dev /dev --die-with-parent --share-net --unshare-pid";
     let mut command = Command::new("bwrap");
     for arg in args.split(" ") {
         command.arg(arg);
+    }
+    for mount in mounts {
+        command.arg("--ro-bind").arg(&mount.0).arg(&mount.1);
     }
     command
         .arg("bash")
