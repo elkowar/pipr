@@ -12,6 +12,7 @@ pub enum EditorEvent {
     NewLine,
     Backspace,
     Delete,
+    Clear,
     GoLeft,
     GoRight,
     GoUp,
@@ -139,6 +140,9 @@ impl EditorState {
                     let removed_line = self.lines.remove(self.cursor_line + 1);
                     self.current_line_mut().push_str(&removed_line);
                 }
+            }
+            EditorEvent::Clear => {
+                self.set_content(&vec![String::new()]);
             }
             EditorEvent::GoLeft => {
                 if self.cursor_col > 0 {

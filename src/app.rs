@@ -1,6 +1,6 @@
 use super::command_evaluation::*;
 use super::commandlist::CommandList;
-use super::lineeditor as le;
+use super::lineeditor::*;
 use super::pipr_config::*;
 
 use crossterm::event::{KeyCode, KeyModifiers};
@@ -18,19 +18,9 @@ pub enum SidebarContent {
     Nothing,
 }
 
-impl SidebarContent {
-    pub fn toggle(&self, other: SidebarContent) -> SidebarContent {
-        if *self == other {
-            SidebarContent::Nothing
-        } else {
-            other
-        }
-    }
-}
-
 pub struct App {
     pub selected_area: UIArea,
-    pub input_state: le::EditorState,
+    pub input_state: EditorState,
     pub command_output: String,
     pub command_error: String,
     pub autoeval_mode: bool,
@@ -48,7 +38,7 @@ impl App {
     pub fn new(executor: Executor, config: PiprConfig, bookmarks: CommandList, history: CommandList) -> App {
         App {
             selected_area: UIArea::CommandInput,
-            input_state: le::EditorState::new(),
+            input_state: EditorState::new(),
             command_output: "".into(),
             command_error: "".into(),
             autoeval_mode: false,
@@ -105,34 +95,37 @@ impl App {
     fn command_input_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         let previous_content = self.input_state.content_str().clone();
         match code {
-            KeyCode::F(1) => self.autoeval_mode = !self.autoeval_mode,
-            KeyCode::Char('?') => self.sidebar_content = self.sidebar_content.toggle(SidebarContent::Help),
-            KeyCode::Char('b') if modifiers.contains(KeyModifiers::CONTROL) => {
-                self.sidebar_content = self.sidebar_content.toggle(SidebarContent::BookmarkList)
+            KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
+                self.sidebar_content = SidebarContent::BookmarkList;
+                self.toggle_bookmarked();
             }
-            KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => self.toggle_bookmarked(),
             KeyCode::Char('p') if modifiers.contains(KeyModifiers::CONTROL) => self.apply_history_prev(),
             KeyCode::Char('n') if modifiers.contains(KeyModifiers::CONTROL) => self.apply_history_next(),
-            KeyCode::Char('z') if modifiers.contains(KeyModifiers::CONTROL) => {
-                //self.last_unsaved.clone().map(|x| self.input_state.set_content(&x));
-            }
 
+            KeyCode::Left => self.input_state.apply_event(EditorEvent::GoLeft),
+            KeyCode::Right => self.input_state.apply_event(EditorEvent::GoRight),
+            KeyCode::Up => self.input_state.apply_event(EditorEvent::GoUp),
+            KeyCode::Down => self.input_state.apply_event(EditorEvent::GoDown),
+            KeyCode::Home => self.input_state.apply_event(EditorEvent::Home),
+            KeyCode::End => self.input_state.apply_event(EditorEvent::End),
+            KeyCode::Char('a') if modifiers.contains(KeyModifiers::CONTROL) => self.input_state.apply_event(EditorEvent::Home),
+            KeyCode::Char('e') if modifiers.contains(KeyModifiers::CONTROL) => self.input_state.apply_event(EditorEvent::End),
+
+            KeyCode::Char('x') if modifiers.contains(KeyModifiers::CONTROL) => {
+                self.history.push(self.input_state.content_to_commandentry());
+                self.input_state.apply_event(EditorEvent::Clear);
+            }
             KeyCode::Char('w') if modifiers.contains(KeyModifiers::CONTROL) => {
-                self.input_state.apply_event(le::EditorEvent::KillWordBack)
+                self.input_state.apply_event(EditorEvent::KillWordBack)
             }
             KeyCode::Char('\r') | KeyCode::Char('\n') if modifiers.contains(KeyModifiers::ALT) => {
-                self.input_state.apply_event(le::EditorEvent::NewLine)
+                self.input_state.apply_event(EditorEvent::NewLine)
             }
-            KeyCode::Char(c) => self.input_state.apply_event(le::EditorEvent::NewCharacter(c)),
-            KeyCode::Backspace => self.input_state.apply_event(le::EditorEvent::Backspace),
-            KeyCode::Delete => self.input_state.apply_event(le::EditorEvent::Delete),
 
-            KeyCode::Left => self.input_state.apply_event(le::EditorEvent::GoLeft),
-            KeyCode::Right => self.input_state.apply_event(le::EditorEvent::GoRight),
-            KeyCode::Up => self.input_state.apply_event(le::EditorEvent::GoUp),
-            KeyCode::Down => self.input_state.apply_event(le::EditorEvent::GoDown),
-            KeyCode::Home => self.input_state.apply_event(le::EditorEvent::Home),
-            KeyCode::End => self.input_state.apply_event(le::EditorEvent::End),
+            KeyCode::Char(c) => self.input_state.apply_event(EditorEvent::NewCharacter(c)),
+            KeyCode::Backspace => self.input_state.apply_event(EditorEvent::Backspace),
+            KeyCode::Delete => self.input_state.apply_event(EditorEvent::Delete),
+
             KeyCode::Enter => {
                 if (self.history.len() == 0
                     || self.history.get_at(self.history.len() - 1) != Some(&self.input_state.content_to_commandentry()))
@@ -210,6 +203,26 @@ impl App {
                     _ => UIArea::CommandInput,
                 }
             }
+            KeyCode::F(2) => self.autoeval_mode = !self.autoeval_mode,
+            KeyCode::F(1) => {
+                self.sidebar_content = match self.sidebar_content {
+                    SidebarContent::Help => SidebarContent::Nothing,
+                    _ => SidebarContent::Help,
+                }
+            }
+            KeyCode::Char('b') if modifiers.contains(KeyModifiers::CONTROL) => {
+                self.sidebar_content = match self.sidebar_content {
+                    SidebarContent::BookmarkList => {
+                        self.selected_area = UIArea::CommandInput;
+                        SidebarContent::Nothing
+                    }
+                    _ => {
+                        self.selected_area = UIArea::BookmarkList;
+                        SidebarContent::BookmarkList
+                    }
+                }
+            }
+
             _ => match self.selected_area {
                 UIArea::CommandInput => self.command_input_event(code, modifiers),
                 UIArea::BookmarkList => self.bookmarklist_event(code),

@@ -6,11 +6,13 @@ use tui::widgets::{Block, Borders, List, Paragraph, SelectableList, Text, Widget
 use tui::{backend::Backend, backend::CrosstermBackend, Frame, Terminal};
 use Constraint::*;
 
-const HELP_TEXT: &str = "F1         Toggle autoeval
-?          Show/hide help
+const HELP_TEXT: &str = "\
+F1         Show/hide help
+F2         Toggle autoeval
 Ctrl+B     Show/hide bookmarks
-Ctrl+S     Toggle bookmark
+Ctrl+S     Save bookmark
 Alt+Return Newline
+Ctrl+X     Clear Command
 Ctrl+P     Previous in history
 Ctrl+N     Next in history
 

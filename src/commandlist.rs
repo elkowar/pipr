@@ -41,13 +41,15 @@ impl CommandList {
     }
 
     pub fn push(&mut self, command: CommandEntry) {
-        self.entries.push(command);
-        if let Some(max_size) = self.max_size {
-            if self.len() > max_size {
-                self.entries.remove(0);
+        if !command.as_string().is_empty() {
+            self.entries.push(command);
+            if let Some(max_size) = self.max_size {
+                if self.len() > max_size {
+                    self.entries.remove(0);
+                }
             }
+            self.write_to_file();
         }
-        self.write_to_file();
     }
     pub fn as_strings(&self) -> Vec<String> {
         self.entries.iter().map(|bookmark| bookmark.as_string()).collect()
