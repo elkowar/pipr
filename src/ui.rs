@@ -67,7 +67,7 @@ fn draw_command_list<B: Backend>(mut f: &mut Frame<B>, rect: Rect, state: &Comma
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Percentage(if needs_preview { 60 } else { 100 }), Percentage(100)].as_ref())
-        .split(f.size());
+        .split(rect);
 
     let items = state
         .list

@@ -101,10 +101,14 @@ impl App {
         }
     }
 
+    pub fn set_should_quit(&mut self) {
+        self.should_quit = true;
+        self.history.push(self.input_state.content_to_commandentry());
+    }
     pub fn main_window_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         match code {
-            KeyCode::Esc => self.should_quit = true,
-            KeyCode::Char('q') | KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => self.should_quit = true,
+            KeyCode::Esc => self.set_should_quit(),
+            KeyCode::Char('q') | KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => self.set_should_quit(),
             KeyCode::F(2) => self.autoeval_mode = !self.autoeval_mode,
 
             KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
@@ -147,21 +151,13 @@ impl App {
                 self.history.push(self.input_state.content_to_commandentry());
 
                 let entries = self.bookmarks.entries.clone();
-                self.window_state = WindowState::BookmarkList(CommandListState {
-                    selected_idx: if entries.len() == 0 { None } else { Some(0) },
-                    list: entries,
-                    recently_deleted: Vec::new(),
-                })
+                self.window_state = WindowState::BookmarkList(CommandListState::new(entries, None));
             }
             KeyCode::Char('h') if modifiers.contains(KeyModifiers::CONTROL) => {
                 self.history.push(self.input_state.content_to_commandentry());
 
                 let entries = self.history.entries.clone();
-                self.window_state = WindowState::HistoryList(CommandListState {
-                    selected_idx: self.history_idx.or(if self.history.len() > 0 { Some(0) } else { None }),
-                    list: entries,
-                    recently_deleted: Vec::new(),
-                })
+                self.window_state = WindowState::HistoryList(CommandListState::new(entries, self.history_idx));
             }
             _ => {
                 let window_state = &mut self.window_state;
@@ -204,6 +200,13 @@ impl App {
 }
 
 impl CommandListState {
+    pub fn new(list: Vec<CommandEntry>, selected_idx: Option<usize>) -> CommandListState {
+        CommandListState {
+            selected_idx: selected_idx.or(if list.len() == 0 { None } else { Some(0) }),
+            list,
+            recently_deleted: Vec::new(),
+        }
+    }
     pub fn selected_entry(&self) -> Option<&CommandEntry> {
         self.selected_idx.and_then(|idx| self.list.get(idx))
     }
