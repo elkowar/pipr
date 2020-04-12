@@ -21,6 +21,7 @@ Config file is in
 pub struct CommandListState {
     pub list: Vec<CommandEntry>,
     pub selected_idx: Option<usize>,
+    recently_deleted: Vec<CommandEntry>,
 }
 
 pub enum WindowState {
@@ -170,6 +171,7 @@ impl App {
                 self.window_state = WindowState::BookmarkList(CommandListState {
                     selected_idx: if entries.len() == 0 { None } else { Some(0) },
                     list: entries,
+                    recently_deleted: Vec::new(),
                 })
             }
             KeyCode::Char('h') if modifiers.contains(KeyModifiers::CONTROL) => {
@@ -179,6 +181,7 @@ impl App {
                 self.window_state = WindowState::HistoryList(CommandListState {
                     selected_idx: self.history_idx.or(if self.history.len() > 0 { Some(0) } else { None }),
                     list: entries,
+                    recently_deleted: Vec::new(),
                 })
             }
             _ => {
@@ -187,23 +190,29 @@ impl App {
                     WindowState::Main => self.main_window_tui_event(code, modifiers),
                     WindowState::TextView(_, _) => self.window_state = WindowState::Main,
                     WindowState::BookmarkList(state) => match code {
-                        KeyCode::Esc => self.window_state = WindowState::Main,
+                        KeyCode::Esc => {
+                            self.bookmarks.entries = state.list.clone();
+                            self.window_state = WindowState::Main;
+                        }
                         KeyCode::Enter => {
                             if let Some(entry) = state.selected_entry() {
                                 self.input_state.load_commandentry(entry);
                             }
+                            self.bookmarks.entries = state.list.clone();
                             self.window_state = WindowState::Main;
                         }
                         _ => state.apply_event(code),
                     },
                     WindowState::HistoryList(state) => match code {
-                        KeyCode::Esc => self.window_state = WindowState::Main,
+                        KeyCode::Esc => {
+                            self.history.entries = state.list.clone();
+                            self.window_state = WindowState::Main;
+                        }
                         KeyCode::Enter => {
-                            if let Some(idx) = state.selected_idx {
-                                if let Some(entry) = self.history.get_at(idx) {
-                                    self.input_state.load_commandentry(entry);
-                                }
+                            if let Some(entry) = state.selected_idx.and_then(|idx| state.list.get(idx)) {
+                                self.input_state.load_commandentry(entry);
                             }
+                            self.history.entries = state.list.clone();
                             self.history_idx = state.selected_idx;
                             self.window_state = WindowState::Main;
                         }
@@ -226,6 +235,19 @@ impl CommandListState {
                 KeyCode::Up | KeyCode::Char('k') if selected_idx > 0 => self.selected_idx = Some(selected_idx - 1),
                 KeyCode::Down | KeyCode::Char('j') if selected_idx < self.list.len() - 1 => {
                     self.selected_idx = Some(selected_idx + 1)
+                }
+                KeyCode::Char('u') => {
+                    self.recently_deleted.pop().map(|entry| self.list.push(entry));
+                    self.selected_idx = Some(self.list.len() - 1);
+                }
+                KeyCode::Delete | KeyCode::Backspace => {
+                    let deleted_entry = self.list.remove(selected_idx);
+                    self.recently_deleted.push(deleted_entry);
+                    if self.list.is_empty() {
+                        self.selected_idx = None;
+                    } else if self.list.get(selected_idx).is_none() {
+                        self.selected_idx = Some(selected_idx - 1);
+                    }
                 }
                 _ => {}
             }

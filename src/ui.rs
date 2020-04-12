@@ -18,31 +18,35 @@ fn make_default_block(title: &str, selected: bool) -> Block {
 
 pub fn draw_app(mut terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> Result<(), failure::Error> {
     let mut input_field_rect = tui::layout::Rect::new(0, 0, 0, 0);
-    terminal.draw(|mut f| match &app.window_state {
-        WindowState::Main => {
-            let exec_chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Length(2 + app.input_state.content_lines().len() as u16), Percentage(100)].as_ref())
-                .split(f.size());
+    terminal.draw(|mut f| {
+        let root_rect = f.size();
+        let root_rect = Rect::new(1, 1, root_rect.width - 2, root_rect.height - 2);
+        match &app.window_state {
+            WindowState::Main => {
+                let exec_chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([Length(2 + app.input_state.content_lines().len() as u16), Percentage(100)].as_ref())
+                    .split(root_rect);
 
-            input_field_rect = exec_chunks[0];
-            draw_input_field(&mut f, input_field_rect, &app);
-            draw_outputs(&mut f, exec_chunks[1], &app.command_output, &app.command_error);
+                input_field_rect = exec_chunks[0];
+                draw_input_field(&mut f, input_field_rect, &app);
+                draw_outputs(&mut f, exec_chunks[1], &app.command_output, &app.command_error);
+            }
+            WindowState::TextView(title, text) => {
+                Paragraph::new([Text::raw(text)].iter())
+                    .block(make_default_block(title, true))
+                    .render(&mut f, root_rect);
+            }
+            WindowState::BookmarkList(listview_state) => {
+                draw_command_list(&mut f, root_rect, listview_state, "Bookmarks");
+            }
+            WindowState::HistoryList(listview_state) => {
+                draw_command_list(&mut f, root_rect, listview_state, "History");
+            }
         }
-        WindowState::TextView(title, text) => {
-            let rect = f.size();
-            Paragraph::new([Text::raw(text)].iter())
-                .block(make_default_block(title, true))
-                .render(&mut f, rect);
-        }
-        WindowState::BookmarkList(listview_state) => {
-            let rect = f.size();
-            draw_command_list(&mut f, rect, listview_state, "Bookmarks");
-        }
-        WindowState::HistoryList(listview_state) => {
-            let rect = f.size();
-            draw_command_list(&mut f, rect, listview_state, "History");
-        }
+
+        Paragraph::new([Text::raw("Help: F1")].iter())
+            .render(&mut f, Rect::new(root_rect.width - 10 as u16, root_rect.height as u16, 10, 1))
     })?;
 
     match app.window_state {
@@ -58,20 +62,33 @@ pub fn draw_app(mut terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut
 }
 
 fn draw_command_list<B: Backend>(mut f: &mut Frame<B>, rect: Rect, state: &CommandListState, title: &str) {
+    let needs_preview = state.selected_entry().map(|e| e.lines().len() > 1) == Some(true);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Percentage(if needs_preview { 60 } else { 100 }), Percentage(100)].as_ref())
+        .split(f.size());
+
+    let items = state
+        .list
+        .iter()
+        .map(|entry| str::replace(&entry.as_string(), "\n", " ↵ "))
+        .collect::<Vec<String>>();
     SelectableList::default()
         .block(make_default_block(title, true))
-        .items(
-            state
-                .list
-                .iter()
-                .map(|entry| entry.as_string())
-                .collect::<Vec<String>>()
-                .as_slice(),
-        )
+        .items(items.as_slice())
         .select(state.selected_idx)
         .highlight_style(Style::default().modifier(Modifier::ITALIC))
         .highlight_symbol(">>")
-        .render(&mut f, rect);
+        .render(&mut f, chunks[0]);
+
+    if needs_preview {
+        if let Some(selected_content) = state.selected_entry() {
+            Paragraph::new([Text::raw(selected_content.as_string())].iter())
+                .block(make_default_block("Preview", false))
+                .render(&mut f, chunks[1]);
+        }
+    }
 }
 
 fn draw_input_field<B: Backend>(mut f: &mut Frame<B>, rect: Rect, app: &App) {
