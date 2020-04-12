@@ -1,8 +1,9 @@
 #![feature(vec_remove_item)]
 #[macro_use]
-extern crate num_derive;
-extern crate clap;
 extern crate lazy_static;
+extern crate clap;
+#[macro_use]
+extern crate num_derive;
 extern crate num_traits;
 
 use clap::Arg;

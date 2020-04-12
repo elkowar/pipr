@@ -6,6 +6,17 @@ use tui::widgets::{Block, Borders, List, Paragraph, SelectableList, Text, Widget
 use tui::{backend::Backend, backend::CrosstermBackend, Frame, Terminal};
 use Constraint::*;
 
+const HELP_TEXT: &str = "F1         Toggle autoeval
+?          Show/hide help
+Ctrl+B     Show/hide bookmarks
+Ctrl+S     Toggle bookmark
+Alt+Return Newline
+Ctrl+P     Previous in history
+Ctrl+N     Next in history
+
+Config file is in
+~/.config/pipr/pipr.toml";
+
 fn make_default_block(title: &str, selected: bool) -> Block {
     let title_style = if selected {
         Style::default().fg(Color::Black).bg(Color::Cyan)
@@ -19,30 +30,30 @@ fn make_default_block(title: &str, selected: bool) -> Block {
 pub fn draw_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> Result<(), failure::Error> {
     let mut input_field_rect = tui::layout::Rect::new(0, 0, 0, 0);
     terminal.draw(|mut f| {
+        let sidebar_open = app.sidebar_content != SidebarContent::Nothing;
         let root_chunks = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Percentage(if app.bookmarks_visible { 30 } else { 0 }), Percentage(80)].as_ref())
+            .constraints([Percentage(if sidebar_open { 30 } else { 0 }), Percentage(100)].as_ref())
             .margin(1)
             .split(f.size());
 
         let exec_chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints(
-                [
-                    Length(2 + app.input_state.content_lines().len() as u16),
-                    Length(3),
-                    Percentage(100),
-                ]
-                .as_ref(),
-            )
+            .constraints([Length(2 + app.input_state.content_lines().len() as u16), Percentage(100)].as_ref())
             .split(root_chunks[1]);
 
         input_field_rect = exec_chunks[0];
 
-        draw_bookmark_list(&mut f, root_chunks[0], app.selected_area == UIArea::BookmarkList, &app);
+        match app.sidebar_content {
+            SidebarContent::Help => draw_shortcuts(&mut f, root_chunks[0]),
+            SidebarContent::BookmarkList => {
+                draw_bookmark_list(&mut f, root_chunks[0], app.selected_area == UIArea::BookmarkList, &app)
+            }
+            _ => {}
+        }
+
         draw_input_field(&mut f, input_field_rect, app.selected_area == UIArea::CommandInput, &app);
-        draw_outputs(&mut f, exec_chunks[2], &app.command_output, &app.command_error);
-        draw_shortcuts(&mut f, exec_chunks[1], app.autoeval_mode);
+        draw_outputs(&mut f, exec_chunks[1], &app.command_output, &app.command_error);
     })?;
 
     // move cursor to where it belongs.
@@ -111,15 +122,8 @@ fn draw_outputs<B: Backend>(mut f: &mut Frame<B>, rect: Rect, stdout: &str, stde
     }
 }
 
-fn draw_shortcuts<B: Backend>(mut f: &mut Frame<B>, rect: Rect, autoeval_mode: bool) {
-    let immediate_eval_state = if autoeval_mode { "Active" } else { "Inactive" };
-    let mappings = vec![
-        format!("F1: Toggle autoeval ({})", immediate_eval_state),
-        "Ctrl+B: Show/hide bookmarks".into(),
-        "Ctrl+S: Toggle bookmark".into(),
-    ];
-    let mappings = mappings.join(" | ");
-    Paragraph::new([Text::raw(mappings)].iter())
-        .block(make_default_block("Immediate eval", false))
+fn draw_shortcuts<B: Backend>(mut f: &mut Frame<B>, rect: Rect) {
+    Paragraph::new([Text::raw(HELP_TEXT)].iter())
+        .block(make_default_block("Help", false))
         .render(&mut f, rect);
 }

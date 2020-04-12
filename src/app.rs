@@ -2,7 +2,6 @@ use super::command_evaluation::*;
 use super::commandlist::CommandList;
 use super::lineeditor as le;
 use super::pipr_config::*;
-use num_traits::FromPrimitive;
 
 use crossterm::event::{KeyCode, KeyModifiers};
 
@@ -12,18 +11,19 @@ pub enum UIArea {
     BookmarkList,
 }
 
-impl UIArea {
-    fn next_area(&self) -> UIArea {
-        match FromPrimitive::from_u8(*self as u8 + 1) {
-            Some(next) => next,
-            None => FromPrimitive::from_u8(0).unwrap(),
-        }
-    }
-    fn prev_area(&self) -> UIArea {
-        if *self as u8 == 0 {
-            FromPrimitive::from_u8(2).unwrap()
+#[derive(PartialEq)]
+pub enum SidebarContent {
+    BookmarkList,
+    Help,
+    Nothing,
+}
+
+impl SidebarContent {
+    pub fn toggle(&self, other: SidebarContent) -> SidebarContent {
+        if *self == other {
+            SidebarContent::Nothing
         } else {
-            FromPrimitive::from_u8(*self as u8 - 1).unwrap()
+            other
         }
     }
 }
@@ -41,7 +41,7 @@ pub struct App {
     pub should_quit: bool,
     pub history: CommandList,
     pub history_idx: Option<usize>,
-    pub bookmarks_visible: bool,
+    pub sidebar_content: SidebarContent,
 }
 
 impl App {
@@ -55,7 +55,11 @@ impl App {
             selected_bookmark_idx: None,
             should_quit: false,
             history_idx: None,
-            bookmarks_visible: true,
+            sidebar_content: if config.show_help {
+                SidebarContent::Help
+            } else {
+                SidebarContent::Nothing
+            },
             executor,
             config,
             bookmarks,
@@ -102,7 +106,10 @@ impl App {
         let previous_content = self.input_state.content_str().clone();
         match code {
             KeyCode::F(1) => self.autoeval_mode = !self.autoeval_mode,
-            KeyCode::Char('b') if modifiers.contains(KeyModifiers::CONTROL) => self.bookmarks_visible = !self.bookmarks_visible,
+            KeyCode::Char('?') => self.sidebar_content = self.sidebar_content.toggle(SidebarContent::Help),
+            KeyCode::Char('b') if modifiers.contains(KeyModifiers::CONTROL) => {
+                self.sidebar_content = self.sidebar_content.toggle(SidebarContent::BookmarkList)
+            }
             KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => self.toggle_bookmarked(),
             KeyCode::Char('p') if modifiers.contains(KeyModifiers::CONTROL) => self.apply_history_prev(),
             KeyCode::Char('n') if modifiers.contains(KeyModifiers::CONTROL) => self.apply_history_next(),
@@ -197,8 +204,12 @@ impl App {
 
     pub fn apply_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         match code {
-            KeyCode::Tab => self.selected_area = self.selected_area.next_area(),
-            KeyCode::BackTab => self.selected_area = self.selected_area.prev_area(),
+            KeyCode::Tab | KeyCode::BackTab => {
+                self.selected_area = match self.selected_area {
+                    UIArea::CommandInput if self.sidebar_content == SidebarContent::BookmarkList => UIArea::BookmarkList,
+                    _ => UIArea::CommandInput,
+                }
+            }
             _ => match self.selected_area {
                 UIArea::CommandInput => self.command_input_event(code, modifiers),
                 UIArea::BookmarkList => self.bookmarklist_event(code),
