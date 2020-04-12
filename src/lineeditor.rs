@@ -35,7 +35,7 @@ impl EditorState {
     }
 
     pub fn load_bookmark(&mut self, bookmark: &Bookmark) {
-        self.set_content(&bookmark.to_lines());
+        self.set_content(&bookmark.lines());
     }
 
     pub fn set_content(&mut self, new_content: &Vec<String>) {

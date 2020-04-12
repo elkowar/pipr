@@ -1,4 +1,5 @@
-use std::process::Command;
+use std::process::{Child, Command, Stdio};
+use std::str;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
@@ -10,15 +11,20 @@ pub enum ExecutionMode {
 
 pub struct Executor {
     pub execution_mode: ExecutionMode,
-    cmd_out_receive: Receiver<(String, String)>,
+    cmd_out_receive: Receiver<ProcessResult>,
     cmd_in_send: Sender<String>,
     stop_send: Sender<()>,
+}
+
+pub enum ProcessResult {
+    Ok(String),
+    NotOk(String),
 }
 
 impl Executor {
     pub fn start_executor(execution_mode: ExecutionMode) -> Executor {
         let (cmd_in_send, cmd_in_receive) = mpsc::channel::<String>();
-        let (cmd_out_send, cmd_out_receive) = mpsc::channel::<(String, String)>();
+        let (cmd_out_send, cmd_out_receive) = mpsc::channel::<ProcessResult>();
         let (stop_send, stop_receive) = mpsc::channel::<()>();
 
         let executor = Executor {
@@ -28,13 +34,44 @@ impl Executor {
             stop_send,
         };
 
-        thread::spawn(move || loop {
-            if let Ok(command) = cmd_in_receive.try_recv() {
-                cmd_out_send.send(execute_blocking(&execution_mode, &command)).unwrap();
-            }
+        thread::spawn(move || {
+            let mut latest_process_handle: Option<Child> = None;
 
-            if let Ok(()) = stop_receive.try_recv() {
-                break;
+            loop {
+                if let Ok(command) = cmd_in_receive.try_recv() {
+                    match start_command(&execution_mode, &command) {
+                        Ok(handle) => {
+                            // replace the latest_process_handle with the new one, killing any old processes
+                            if let Some(mut old_handle) = latest_process_handle.replace(handle) {
+                                old_handle.kill().unwrap();
+                            }
+                        }
+                        Err(error) => cmd_out_send.send(ProcessResult::NotOk(error.into())).unwrap(), // if there's an error, show it!
+                    };
+                }
+
+                // take ownership of the handle and check if the process has finished
+                if let Some(mut handle) = latest_process_handle.take() {
+                    if let Some(status) = handle.try_wait().unwrap() {
+                        // if yes, send out it's output
+                        let command_output = handle.wait_with_output().unwrap();
+                        let result = if status.success() {
+                            ProcessResult::Ok(str::from_utf8(&command_output.stdout).unwrap().to_owned())
+                        } else {
+                            ProcessResult::NotOk(str::from_utf8(&command_output.stderr).unwrap().to_owned())
+                        };
+
+                        cmd_out_send.send(result).unwrap();
+                    } else {
+                        // otherwise give back the process_handle to the latest_process_handle option.
+                        // this code effectively moves the handle out of the option _conditionally_, depending on the try_wait()
+                        latest_process_handle = Some(handle);
+                    }
+                }
+
+                if let Ok(()) = stop_receive.try_recv() {
+                    break;
+                }
             }
         });
         executor
@@ -44,7 +81,7 @@ impl Executor {
         self.cmd_in_send.send(cmd.into()).unwrap();
     }
 
-    pub fn poll_output(&self) -> Option<(String, String)> {
+    pub fn poll_output(&self) -> Option<ProcessResult> {
         self.cmd_out_receive.try_recv().ok()
     }
 
@@ -53,43 +90,42 @@ impl Executor {
     }
 }
 
-fn execute_blocking(execution_mode: &ExecutionMode, cmd: &str) -> (String, String) {
+fn start_command(execution_mode: &ExecutionMode, cmd: &str) -> Result<Child, &'static str> {
     if cmd.contains("rm ") || cmd.contains("mv ") || cmd.contains("-i") || cmd.contains("dd ") {
-        return ("".into(), "Will not evaluate this command.".into());
+        return Err("Will not run this command, it's for your own good. Believe me.");
     }
     match execution_mode {
-        ExecutionMode::UNSAFE => run_cmd_unsafe(cmd),
-        ExecutionMode::ISOLATED => run_cmd_isolated(cmd),
+        ExecutionMode::UNSAFE => Ok(run_cmd_unsafe(cmd)),
+        ExecutionMode::ISOLATED => Ok(run_cmd_isolated(cmd)),
     }
 }
 
-fn run_cmd_isolated(cmd: &str) -> (String, String) {
+fn run_cmd_isolated(cmd: &str) -> Child {
     let args = "--ro-bind ./ /working_directory --chdir /working_directory \
-                    --ro-bind /lib /lib --ro-bind /usr /usr --ro-bind /lib64 /lib64 --ro-bind /bin /bin \
-                    --tmpfs /tmp --proc /proc --dev /dev --ro-bind /etc /etc --die-with-parent --share-net --unshare-pid";
+                --ro-bind /lib /lib --ro-bind /usr /usr --ro-bind /lib64 /lib64 --ro-bind /bin /bin \
+                --tmpfs /tmp --proc /proc --dev /dev --ro-bind /etc /etc --die-with-parent --share-net --unshare-pid";
     let mut command = Command::new("bwrap");
     for arg in args.split(" ") {
         command.arg(arg);
     }
-    let output = command
+    command
         .arg("bash")
         .arg("-c")
         .arg(cmd)
-        .output()
-        .expect("Failed to execute process in bwrap. this might be a bwrap problem,... or not");
-
-    let stdout = std::str::from_utf8(&output.stdout).unwrap().to_owned();
-    let stderr = std::str::from_utf8(&output.stderr).unwrap().to_owned();
-    (stdout, stderr)
+        .stdout(Stdio::piped())
+        .stdin(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("Failed to execute process in bwrap. this might be a bwrap problem,... or not")
 }
 
-fn run_cmd_unsafe(cmd: &str) -> (String, String) {
-    let output = Command::new("bash")
+fn run_cmd_unsafe(cmd: &str) -> Child {
+    Command::new("bash")
         .arg("-c")
         .arg(cmd)
-        .output()
-        .expect("failed to execute process");
-    let stdout = std::str::from_utf8(&output.stdout).unwrap().to_owned();
-    let stderr = std::str::from_utf8(&output.stderr).unwrap().to_owned();
-    (stdout, stderr)
+        .stdout(Stdio::piped())
+        .stdin(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to execute process")
 }

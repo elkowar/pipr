@@ -15,8 +15,11 @@ impl Bookmark {
             content: content.to_owned(),
         }
     }
-    pub fn to_lines(&self) -> Vec<String> {
+    pub fn lines(&self) -> Vec<String> {
         self.content.clone()
+    }
+    pub fn as_string(&self) -> String {
+        self.lines().join("\n")
     }
     pub fn first_line(&self) -> &str {
         &self.content[0]
@@ -35,7 +38,7 @@ impl BookmarkList {
         write_to_file(self);
     }
     pub fn as_strings(&self) -> Vec<String> {
-        self.0.iter().map(|bookmark| bookmark.to_lines().join("\n")).collect()
+        self.0.iter().map(|bookmark| bookmark.as_string()).collect()
     }
     pub fn bookmark_at(&self, idx: usize) -> Option<&Bookmark> {
         self.0.get(idx)

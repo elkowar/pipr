@@ -139,11 +139,16 @@ impl App {
         }
     }
 
-    pub fn on_cmd_output(&mut self, (stdout, stderr): (String, String)) {
-        if stderr.is_empty() {
-            self.command_output = stdout;
+    pub fn on_cmd_output(&mut self, process_result: ProcessResult) {
+        match process_result {
+            ProcessResult::Ok(stdout) => {
+                self.command_output = stdout;
+                self.command_error = String::new();
+            }
+            ProcessResult::NotOk(stderr) => {
+                self.command_error = stderr;
+            }
         }
-        self.command_error = stderr;
     }
 
     pub fn apply_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
