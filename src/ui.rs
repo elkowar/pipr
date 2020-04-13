@@ -25,7 +25,7 @@ pub fn draw_app(mut terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut
             WindowState::Main => {
                 let root_chunks = Layout::default()
                     .direction(Direction::Horizontal)
-                    .constraints([Percentage(if app.snippet_mode { 20 } else { 0 }), Percentage(100)].as_ref())
+                    .constraints([Percentage(if app.snippet_mode { 40 } else { 0 }), Percentage(100)].as_ref())
                     .split(root_rect);
 
                 let snippet_list = app
@@ -45,7 +45,13 @@ pub fn draw_app(mut terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut
 
                 input_field_rect = exec_chunks[0];
                 draw_input_field(&mut f, input_field_rect, &app);
-                draw_outputs(&mut f, exec_chunks[1], &app.command_output, &app.command_error);
+                draw_outputs(
+                    &mut f,
+                    exec_chunks[1],
+                    &app.input_state.content_str() == &app.last_executed_cmd,
+                    &app.command_output,
+                    &app.command_error,
+                );
             }
             WindowState::TextView(title, text) => {
                 Paragraph::new([Text::raw(text)].iter())
@@ -53,10 +59,12 @@ pub fn draw_app(mut terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut
                     .render(&mut f, root_rect);
             }
             WindowState::BookmarkList(listview_state) => {
-                draw_command_list(&mut f, root_rect, listview_state, "Bookmarks");
+                let always_show_preview = app.config.cmdlist_always_show_preview;
+                draw_command_list(&mut f, root_rect, always_show_preview, listview_state, "Bookmarks");
             }
             WindowState::HistoryList(listview_state) => {
-                draw_command_list(&mut f, root_rect, listview_state, "History");
+                let always_show_preview = app.config.cmdlist_always_show_preview;
+                draw_command_list(&mut f, root_rect, always_show_preview, listview_state, "History");
             }
         }
 
@@ -76,12 +84,18 @@ pub fn draw_app(mut terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut
     Ok(())
 }
 
-fn draw_command_list<B: Backend>(mut f: &mut Frame<B>, rect: Rect, state: &CommandListState, title: &str) {
-    let needs_preview = state.selected_entry().map(|e| e.lines().len() > 1) == Some(true);
+fn draw_command_list<B: Backend>(
+    mut f: &mut Frame<B>,
+    rect: Rect,
+    always_show_preview: bool,
+    state: &CommandListState,
+    title: &str,
+) {
+    let show_preview = always_show_preview || state.selected_entry().map(|e| e.lines().len() > 1) == Some(true);
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Percentage(if needs_preview { 60 } else { 100 }), Percentage(100)].as_ref())
+        .constraints([Percentage(if show_preview { 60 } else { 100 }), Percentage(100)].as_ref())
         .split(rect);
 
     let items = state
@@ -89,6 +103,7 @@ fn draw_command_list<B: Backend>(mut f: &mut Frame<B>, rect: Rect, state: &Comma
         .iter()
         .map(|entry| str::replace(&entry.as_string(), "\n", " ↵ "))
         .collect::<Vec<String>>();
+
     SelectableList::default()
         .block(make_default_block(title, true))
         .items(items.as_slice())
@@ -97,7 +112,7 @@ fn draw_command_list<B: Backend>(mut f: &mut Frame<B>, rect: Rect, state: &Comma
         .highlight_symbol(">>")
         .render(&mut f, chunks[0]);
 
-    if needs_preview {
+    if show_preview {
         if let Some(selected_content) = state.selected_entry() {
             Paragraph::new([Text::raw(selected_content.as_string())].iter())
                 .block(make_default_block("Preview", false))
@@ -133,7 +148,7 @@ fn draw_input_field<B: Backend>(mut f: &mut Frame<B>, rect: Rect, app: &App) {
         .render(&mut f, rect);
 }
 
-fn draw_outputs<B: Backend>(mut f: &mut Frame<B>, rect: Rect, stdout: &str, stderr: &str) {
+fn draw_outputs<B: Backend>(mut f: &mut Frame<B>, rect: Rect, changed: bool, stdout: &str, stderr: &str) {
     let output_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(if stderr.is_empty() {
@@ -144,7 +159,10 @@ fn draw_outputs<B: Backend>(mut f: &mut Frame<B>, rect: Rect, stdout: &str, stde
         .split(rect);
 
     Paragraph::new([Text::raw(stdout)].iter())
-        .block(make_default_block("Output", false))
+        .block(make_default_block(
+            &format!("Output{}", if changed { "" } else { " [+]" }),
+            false,
+        ))
         .render(&mut f, output_chunks[0]);
 
     if !stderr.is_empty() {

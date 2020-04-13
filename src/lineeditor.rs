@@ -73,7 +73,7 @@ impl EditorState {
     }
 
     pub fn content_str(&self) -> String {
-        self.lines.join("").to_owned()
+        self.lines.join(" ").to_owned()
     }
 
     pub fn content_lines(&self) -> Vec<String> {

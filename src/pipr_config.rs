@@ -24,6 +24,7 @@ const DEFAULT_CONFIG: &str = "
 paranoid_history_mode_default = false
 
 history_size = 500
+cmdlist_always_show_preview = false
 
 # directories mounted into the isolated environment.
 # Syntax: '<on_host>:<in_isolated>'
@@ -38,6 +39,7 @@ const CONFIG_PATH_RELATIVE_TO_HOME: &'static str = ".config/pipr/pipr.toml";
 pub struct PiprConfig {
     pub finish_hook: Option<String>,
     pub isolation_mounts_readonly: Vec<(String, String)>,
+    pub cmdlist_always_show_preview: bool,
     pub paranoid_history_mode_default: bool,
     pub history_size: usize,
     pub snippets: HashMap<char, Snippet>,
@@ -62,6 +64,7 @@ impl PiprConfig {
             finish_hook: settings.get::<String>("finish_hook").ok(),
             paranoid_history_mode_default: settings.get::<bool>("paranoid_history_mode_default").unwrap_or(false),
             history_size: settings.get::<usize>("history_size").unwrap_or(500),
+            cmdlist_always_show_preview: settings.get::<bool>("cmdlist_always_show_preview").unwrap_or(false),
             snippets: settings
                 .get::<HashMap<String, String>>("snippets")
                 .unwrap_or_default()

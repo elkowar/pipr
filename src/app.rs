@@ -8,13 +8,15 @@ use crossterm::event::{KeyCode, KeyModifiers};
 pub const HELP_TEXT: &str = "\
 F1         Show/hide help
 F2         Toggle autoeval
-F2         Toggle Paranoid history (fills up history in autoeval)
+F3         Toggle Paranoid history (fills up history in autoeval)
 Ctrl+B     Show/hide bookmarks
+Ctrl+H     Show/hide history
 Ctrl+S     Save bookmark
 Alt+Return Newline
 Ctrl+X     Clear Command
 Ctrl+P     Previous in history
 Ctrl+N     Next in history
+Ctrl+V     Start snippet mode (press the key for your Snippet to choose)
 
 Config file is in
 ~/.config/pipr/pipr.toml";
@@ -37,6 +39,7 @@ pub struct App {
     pub command_output: String,
     pub command_error: String,
     pub autoeval_mode: bool,
+    pub last_executed_cmd: String,
     pub paranoid_history_mode: bool,
     pub window_state: WindowState,
     pub bookmarks: CommandList,
@@ -56,6 +59,7 @@ impl App {
             command_output: "".into(),
             command_error: "".into(),
             autoeval_mode: false,
+            last_executed_cmd: "".into(),
             paranoid_history_mode: config.paranoid_history_mode_default,
             should_quit: false,
             history_idx: None,
@@ -140,10 +144,7 @@ impl App {
                     self.input_state.apply_event(EditorEvent::Clear);
                 }
 
-                KeyCode::Char('a') if modifiers.contains(KeyModifiers::CONTROL) => {
-                    self.snippet_mode = true;
-                }
-
+                KeyCode::Char('v') if modifiers.contains(KeyModifiers::CONTROL) => self.snippet_mode = true,
                 KeyCode::Enter => {
                     if (self.history.len() == 0
                         || self.history.get_at(self.history.len() - 1) != Some(&self.input_state.content_to_commandentry()))
@@ -151,7 +152,9 @@ impl App {
                     {
                         self.history.push(self.input_state.content_to_commandentry());
                     }
-                    self.executor.execute(&self.input_state.content_str());
+                    let command = self.input_state.content_str();
+                    self.executor.execute(&command);
+                    self.last_executed_cmd = command;
                 }
 
                 _ => {
@@ -160,7 +163,9 @@ impl App {
                         self.input_state.apply_event(editor_event);
 
                         if previous_content != self.input_state.content_str() && self.autoeval_mode {
-                            self.executor.execute(&self.input_state.content_str());
+                            let command = self.input_state.content_str();
+                            self.executor.execute(&command);
+                            self.last_executed_cmd = command;
                         }
                     }
                 }
@@ -170,19 +175,28 @@ impl App {
 
     pub fn on_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         match code {
-            KeyCode::F(1) => self.window_state = WindowState::TextView("Help".to_string(), HELP_TEXT.to_string()),
-            KeyCode::Char('b') if modifiers.contains(KeyModifiers::CONTROL) => {
-                self.history.push(self.input_state.content_to_commandentry());
+            KeyCode::F(1) => match self.window_state {
+                WindowState::TextView(_, _) => self.window_state = WindowState::Main,
+                _ => self.window_state = WindowState::TextView("Help".to_string(), HELP_TEXT.to_string()),
+            },
+            KeyCode::Char('b') if modifiers.contains(KeyModifiers::CONTROL) => match self.window_state {
+                WindowState::BookmarkList(_) => self.window_state = WindowState::Main,
+                _ => {
+                    self.history.push(self.input_state.content_to_commandentry());
 
-                let entries = self.bookmarks.entries.clone();
-                self.window_state = WindowState::BookmarkList(CommandListState::new(entries, None));
-            }
-            KeyCode::Char('h') if modifiers.contains(KeyModifiers::CONTROL) => {
-                self.history.push(self.input_state.content_to_commandentry());
+                    let entries = self.bookmarks.entries.clone();
+                    self.window_state = WindowState::BookmarkList(CommandListState::new(entries, None));
+                }
+            },
+            KeyCode::Char('h') if modifiers.contains(KeyModifiers::CONTROL) => match self.window_state {
+                WindowState::HistoryList(_) => self.window_state = WindowState::Main,
+                _ => {
+                    self.history.push(self.input_state.content_to_commandentry());
 
-                let entries = self.history.entries.clone();
-                self.window_state = WindowState::HistoryList(CommandListState::new(entries, self.history_idx));
-            }
+                    let entries = self.history.entries.clone();
+                    self.window_state = WindowState::HistoryList(CommandListState::new(entries, self.history_idx));
+                }
+            },
             _ => {
                 let window_state = &mut self.window_state;
                 match window_state {
@@ -226,7 +240,7 @@ impl App {
 impl CommandListState {
     pub fn new(list: Vec<CommandEntry>, selected_idx: Option<usize>) -> CommandListState {
         CommandListState {
-            selected_idx: selected_idx.or(if list.len() == 0 { None } else { Some(0) }),
+            selected_idx: selected_idx.or(if list.len() == 0 { None } else { Some(list.len() - 1) }),
             list,
             recently_deleted: Vec::new(),
         }
@@ -238,6 +252,17 @@ impl CommandListState {
     pub fn apply_event(&mut self, code: KeyCode) {
         if let Some(selected_idx) = self.selected_idx {
             match code {
+                KeyCode::PageUp | KeyCode::Char('g') => {
+                    self.selected_idx = if selected_idx >= 5 { Some(selected_idx - 5) } else { Some(0) };
+                }
+                KeyCode::PageDown | KeyCode::Char('G') if self.list.len() > 0 => {
+                    self.selected_idx = if (selected_idx as isize) < (self.list.len() as isize - 5) {
+                        Some(selected_idx + 5)
+                    } else {
+                        Some(self.list.len() - 1)
+                    };
+                }
+
                 KeyCode::Up | KeyCode::Char('k') if selected_idx > 0 => self.selected_idx = Some(selected_idx - 1),
                 KeyCode::Down | KeyCode::Char('j') if selected_idx < self.list.len() - 1 => {
                     self.selected_idx = Some(selected_idx + 1)
