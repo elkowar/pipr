@@ -1,4 +1,5 @@
 use super::commandlist::*;
+use super::snippets::*;
 use crossterm::event::{KeyCode, KeyModifiers};
 use unicode_width::*;
 
@@ -85,6 +86,11 @@ impl EditorState {
 
     pub fn displayed_cursor_column(&self) -> usize {
         UnicodeWidthStr::width(&self.current_line()[..self.cursor_col])
+    }
+
+    pub fn insert_at_cursor(&mut self, text: &str) {
+        let cursor_col = self.cursor_col;
+        self.current_line_mut().insert_str(cursor_col, &text);
     }
 
     fn current_line_mut(&mut self) -> &mut String {

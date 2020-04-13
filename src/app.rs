@@ -45,6 +45,7 @@ pub struct App {
     pub executor: Executor,
     pub config: PiprConfig,
     pub should_quit: bool,
+    pub snippet_mode: bool,
 }
 
 impl App {
@@ -58,6 +59,7 @@ impl App {
             paranoid_history_mode: config.paranoid_history_mode_default,
             should_quit: false,
             history_idx: None,
+            snippet_mode: false,
             executor,
             config,
             bookmarks,
@@ -112,39 +114,54 @@ impl App {
         self.history.push(self.input_state.content_to_commandentry());
     }
     pub fn main_window_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
-        match code {
-            KeyCode::Esc => self.set_should_quit(),
-            KeyCode::Char('q') | KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => self.set_should_quit(),
-            KeyCode::F(2) => self.autoeval_mode = !self.autoeval_mode,
-            KeyCode::F(3) => self.paranoid_history_mode = !self.paranoid_history_mode,
-
-            KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
-                self.bookmarks.toggle_entry(self.input_state.content_to_commandentry());
-            }
-            KeyCode::Char('p') if modifiers.contains(KeyModifiers::CONTROL) => self.apply_history_prev(),
-            KeyCode::Char('n') if modifiers.contains(KeyModifiers::CONTROL) => self.apply_history_next(),
-            KeyCode::Char('x') if modifiers.contains(KeyModifiers::CONTROL) => {
-                self.history.push(self.input_state.content_to_commandentry());
-                self.input_state.apply_event(EditorEvent::Clear);
-            }
-
-            KeyCode::Enter => {
-                if (self.history.len() == 0
-                    || self.history.get_at(self.history.len() - 1) != Some(&self.input_state.content_to_commandentry()))
-                    && !self.input_state.content_str().is_empty()
-                {
-                    self.history.push(self.input_state.content_to_commandentry());
+        if self.snippet_mode {
+            if let KeyCode::Char(c) = code {
+                // TODO check for pipes and use without_pipe, also normalize spacing
+                if let Some(snippet) = self.config.snippets.get(&c) {
+                    self.input_state.insert_at_cursor(&snippet.text);
+                    self.input_state.cursor_col += snippet.cursor_offset;
                 }
-                self.executor.execute(&self.input_state.content_str());
             }
+            self.snippet_mode = false;
+        } else {
+            match code {
+                KeyCode::Esc => self.set_should_quit(),
+                KeyCode::Char('q') | KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => self.set_should_quit(),
+                KeyCode::F(2) => self.autoeval_mode = !self.autoeval_mode,
+                KeyCode::F(3) => self.paranoid_history_mode = !self.paranoid_history_mode,
 
-            _ => {
-                if let Some(editor_event) = convert_keyevent_to_editorevent(code, modifiers) {
-                    let previous_content = self.input_state.content_str().clone();
-                    self.input_state.apply_event(editor_event);
+                KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.bookmarks.toggle_entry(self.input_state.content_to_commandentry());
+                }
+                KeyCode::Char('p') if modifiers.contains(KeyModifiers::CONTROL) => self.apply_history_prev(),
+                KeyCode::Char('n') if modifiers.contains(KeyModifiers::CONTROL) => self.apply_history_next(),
+                KeyCode::Char('x') if modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.history.push(self.input_state.content_to_commandentry());
+                    self.input_state.apply_event(EditorEvent::Clear);
+                }
 
-                    if previous_content != self.input_state.content_str() && self.autoeval_mode {
-                        self.executor.execute(&self.input_state.content_str());
+                KeyCode::Char('a') if modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.snippet_mode = true;
+                }
+
+                KeyCode::Enter => {
+                    if (self.history.len() == 0
+                        || self.history.get_at(self.history.len() - 1) != Some(&self.input_state.content_to_commandentry()))
+                        && !self.input_state.content_str().is_empty()
+                    {
+                        self.history.push(self.input_state.content_to_commandentry());
+                    }
+                    self.executor.execute(&self.input_state.content_str());
+                }
+
+                _ => {
+                    if let Some(editor_event) = convert_keyevent_to_editorevent(code, modifiers) {
+                        let previous_content = self.input_state.content_str().clone();
+                        self.input_state.apply_event(editor_event);
+
+                        if previous_content != self.input_state.content_str() && self.autoeval_mode {
+                            self.executor.execute(&self.input_state.content_str());
+                        }
                     }
                 }
             }

@@ -24,6 +24,7 @@ pub mod command_evaluation;
 pub mod commandlist;
 pub mod lineeditor;
 pub mod pipr_config;
+pub mod snippets;
 pub mod ui;
 
 pub use app::*;

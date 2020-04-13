@@ -1,7 +1,10 @@
+use std::collections::HashMap;
 use std::env;
 use std::fs::{DirBuilder, File};
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
+
+use super::snippets::*;
 
 const DEFAULT_CONFIG: &str = "
 #  ____  _
@@ -11,7 +14,7 @@ const DEFAULT_CONFIG: &str = "
 # |_|   |_| .__/|_|     xX  xXx___x_|
 #         |_|
 #
-# A commandline utility by 
+# A commandline utility by
 # Leon Kowarschick
 
 # finish_hook: Executed once you close pipr, getting the command you constructed piped into stdin.
@@ -25,6 +28,9 @@ history_size = 500
 # directories mounted into the isolated environment.
 # Syntax: '<on_host>:<in_isolated>'
 isolation_mounts_readonly = ['/lib:/lib', '/usr:/usr', '/lib64:/lib64', '/bin:/bin', '/etc:/etc']
+
+[snippets]
+s = \" | sed -r 's/||//g'\"
 ";
 const CONFIG_PATH_RELATIVE_TO_HOME: &'static str = ".config/pipr/pipr.toml";
 
@@ -34,6 +40,7 @@ pub struct PiprConfig {
     pub isolation_mounts_readonly: Vec<(String, String)>,
     pub paranoid_history_mode_default: bool,
     pub history_size: usize,
+    pub snippets: HashMap<char, Snippet>,
 }
 
 impl PiprConfig {
@@ -55,6 +62,12 @@ impl PiprConfig {
             finish_hook: settings.get::<String>("finish_hook").ok(),
             paranoid_history_mode_default: settings.get::<bool>("paranoid_history_mode_default").unwrap_or(false),
             history_size: settings.get::<usize>("history_size").unwrap_or(500),
+            snippets: settings
+                .get::<HashMap<String, String>>("snippets")
+                .unwrap_or_default()
+                .iter()
+                .map(|(k, v)| (k.chars().nth(0).unwrap(), Snippet::parse(v)))
+                .collect(),
             isolation_mounts_readonly: parse_isolation_mounts(
                 &settings.get::<Vec<String>>("isolation_mounts_readonly").unwrap_or(vec![
                     "/lib:/lib".into(),
