@@ -23,12 +23,18 @@ const DEFAULT_CONFIG: &str = "
 # Paranoid history mode writes every sucessfully running command into the history in autoeval mode.
 paranoid_history_mode_default = false
 
+autoeval_mode_default = false
+
+
 history_size = 500
 cmdlist_always_show_preview = false
 
 # directories mounted into the isolated environment.
 # Syntax: '<on_host>:<in_isolated>'
 isolation_mounts_readonly = ['/lib:/lib', '/usr:/usr', '/lib64:/lib64', '/bin:/bin', '/etc:/etc']
+
+# Snippets can be used to quickly insert common bits of shell
+# use || (two pipes) where you want your cursor to be after insertion
 
 [snippets]
 s = \" | sed -r 's/||//g'\"
@@ -41,6 +47,7 @@ pub struct PiprConfig {
     pub isolation_mounts_readonly: Vec<(String, String)>,
     pub cmdlist_always_show_preview: bool,
     pub paranoid_history_mode_default: bool,
+    pub autoeval_mode_default: bool,
     pub history_size: usize,
     pub snippets: HashMap<char, Snippet>,
 }
@@ -83,6 +90,7 @@ impl PiprConfig {
         PiprConfig {
             finish_hook: settings.get::<String>("finish_hook").ok(),
             paranoid_history_mode_default: settings.get::<bool>("paranoid_history_mode_default").unwrap_or(false),
+            autoeval_mode_default: settings.get::<bool>("autoeval_mode_default").unwrap_or(false),
             history_size: settings.get::<usize>("history_size").unwrap_or(500),
             cmdlist_always_show_preview: settings.get::<bool>("cmdlist_always_show_preview").unwrap_or(false),
             snippets,

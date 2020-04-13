@@ -34,6 +34,9 @@ Help is available in `pipr` by pressing F1.
 
 Autoeval mode, propably the most important feature, can be toggled by pressing F2.
 
+In the textfield, use Alt+Enter to insert a newline. 
+These will be removed when evaluating, so you don't need to add any `\`es to the end of your lines.
+
 Pipr will store it's history and bookmarks as well as a configuration file in `~/.config/pipr`.
 
 ## Dependencies
