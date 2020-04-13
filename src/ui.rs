@@ -23,10 +23,25 @@ pub fn draw_app(mut terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut
         let root_rect = Rect::new(1, 1, root_rect.width - 2, root_rect.height - 2);
         match &app.window_state {
             WindowState::Main => {
+                let root_chunks = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([Percentage(if app.snippet_mode { 20 } else { 0 }), Percentage(100)].as_ref())
+                    .split(root_rect);
+
+                let snippet_list = app
+                    .config
+                    .snippets
+                    .iter()
+                    .map(|(c, snippet)| c.to_string() + ": " + &snippet.text.trim());
+
+                List::new(snippet_list.map(Text::raw))
+                    .block(make_default_block("Snippets", false))
+                    .render(&mut f, root_chunks[0]);
+
                 let exec_chunks = Layout::default()
                     .direction(Direction::Vertical)
                     .constraints([Length(2 + app.input_state.content_lines().len() as u16), Percentage(100)].as_ref())
-                    .split(root_rect);
+                    .split(root_chunks[1]);
 
                 input_field_rect = exec_chunks[0];
                 draw_input_field(&mut f, input_field_rect, &app);
