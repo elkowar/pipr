@@ -60,26 +60,33 @@ impl PiprConfig {
         let mut settings = config::Config::default();
         let config_file = config::File::new(config_path.to_str().unwrap(), config::FileFormat::Toml);
         settings.merge(config_file).unwrap();
+        PiprConfig::from_settings(&settings)
+    }
+
+    fn from_settings(settings: &config::Config) -> PiprConfig {
+        let snippets = settings
+            .get::<HashMap<String, String>>("snippets")
+            .unwrap_or_default()
+            .iter()
+            .map(|(k, v)| (k.chars().nth(0).unwrap(), Snippet::parse(v)))
+            .collect();
+
+        let isolation_mounts_readonly =
+            parse_isolation_mounts(&settings.get::<Vec<String>>("isolation_mounts_readonly").unwrap_or(vec![
+                "/lib:/lib".into(),
+                "/usr:/usr".into(),
+                "/lib64:/lib64".into(),
+                "/bin:/bin".into(),
+                "/etc:/etc".into(),
+            ]));
+
         PiprConfig {
             finish_hook: settings.get::<String>("finish_hook").ok(),
             paranoid_history_mode_default: settings.get::<bool>("paranoid_history_mode_default").unwrap_or(false),
             history_size: settings.get::<usize>("history_size").unwrap_or(500),
             cmdlist_always_show_preview: settings.get::<bool>("cmdlist_always_show_preview").unwrap_or(false),
-            snippets: settings
-                .get::<HashMap<String, String>>("snippets")
-                .unwrap_or_default()
-                .iter()
-                .map(|(k, v)| (k.chars().nth(0).unwrap(), Snippet::parse(v)))
-                .collect(),
-            isolation_mounts_readonly: parse_isolation_mounts(
-                &settings.get::<Vec<String>>("isolation_mounts_readonly").unwrap_or(vec![
-                    "/lib:/lib".into(),
-                    "/usr:/usr".into(),
-                    "/lib64:/lib64".into(),
-                    "/bin:/bin".into(),
-                    "/etc:/etc".into(),
-                ]),
-            ),
+            snippets,
+            isolation_mounts_readonly,
         }
     }
 }

@@ -1,5 +1,4 @@
 use super::commandlist::*;
-use super::snippets::*;
 use crossterm::event::{KeyCode, KeyModifiers};
 use unicode_width::*;
 
