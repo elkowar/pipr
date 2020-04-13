@@ -67,7 +67,7 @@ fn main() -> Result<(), failure::Error> {
         std::process::exit(1);
     }
 
-    let executor = Executor::start_executor(execution_mode);
+    let executor = Executor::start_executor(execution_mode, config.eval_environment.clone());
 
     pub const CONFIG_DIR_RELATIVE_TO_HOME: &'static str = ".config/pipr/";
     let home_path = env::var("HOME").unwrap();
