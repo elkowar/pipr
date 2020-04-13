@@ -59,16 +59,8 @@ To make sure this is the problem, try running unsafe-mode (by passing `--no-isol
 In this mode, your commands get executed directly without a layer of isolation, 
 so be cautious to not do `rm ./` or something. This _could_ delete your stuff.
 
-## Building
-You'll need to have the Rust toolchain installed.
-
-Pipr is currently built with Rust nightly - I like to live dangerous ;D.
+## Installing
+If you have a Rust setup and have cargo installed, you can install pipr using cargo:
+```sh
+$ cargo install pipr
 ```
-$ git clone https://gitlab.com/Elkowar/pipr.git
-$ cd pipr
-$ cargo build --release
-$ chmod +x ./target/release/pipr
-```
-
-To install, move the `pipr` binary to somewhere on your `$PATH`.
-
