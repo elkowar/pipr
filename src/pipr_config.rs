@@ -1,8 +1,7 @@
 use std::collections::HashMap;
-use std::env;
 use std::fs::{DirBuilder, File};
 use std::io::prelude::*;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use super::snippets::*;
 
@@ -40,7 +39,6 @@ isolation_mounts_readonly = ['/lib:/lib', '/usr:/usr', '/lib64:/lib64', '/bin:/b
 [snippets]
 s = \" | sed -r 's/||//g'\"
 ";
-const CONFIG_PATH_RELATIVE_TO_HOME: &'static str = ".config/pipr/pipr.toml";
 
 #[derive(Debug, Clone)]
 pub struct PiprConfig {
@@ -55,19 +53,13 @@ pub struct PiprConfig {
 }
 
 impl PiprConfig {
-    pub fn load_from_file() -> PiprConfig {
-        let home_path = env::var("HOME").unwrap();
-        let config_path = Path::new(&home_path).join(CONFIG_PATH_RELATIVE_TO_HOME);
-        DirBuilder::new()
-            .recursive(true)
-            .create(&config_path.parent().unwrap())
-            .unwrap();
-        if !config_path.exists() {
-            create_default_file(&config_path);
+    pub fn load_from_file(path: &PathBuf) -> PiprConfig {
+        DirBuilder::new().recursive(true).create(&path.parent().unwrap()).unwrap();
+        if !path.exists() {
+            create_default_file(&path);
         }
-
         let mut settings = config::Config::default();
-        let config_file = config::File::new(config_path.to_str().unwrap(), config::FileFormat::Toml);
+        let config_file = config::File::new(path.to_str().unwrap(), config::FileFormat::Toml);
         settings.merge(config_file).unwrap();
         PiprConfig::from_settings(&settings)
     }

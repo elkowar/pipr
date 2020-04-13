@@ -3,18 +3,14 @@ use std::io::prelude::*;
 use std::path::PathBuf;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct CommandEntry {
-    pub command: Vec<String>,
-}
+pub struct CommandEntry(Vec<String>);
 
 impl CommandEntry {
-    pub fn new(content: &Vec<String>) -> CommandEntry {
-        CommandEntry {
-            command: content.to_owned(),
-        }
+    pub fn new(content: Vec<String>) -> CommandEntry {
+        CommandEntry(content)
     }
-    pub fn lines(&self) -> Vec<String> {
-        self.command.clone()
+    pub fn lines(&self) -> &Vec<String> {
+        &self.0
     }
     pub fn as_string(&self) -> String {
         self.lines().join("\n")
@@ -67,7 +63,7 @@ impl CommandList {
         self.write_to_file();
     }
     pub fn toggle_entry(&mut self, entry: CommandEntry) {
-        if !entry.command.is_empty() {
+        if !entry.lines().is_empty() {
             if self.entries.contains(&entry) {
                 self.remove_entry(&entry)
             } else {
@@ -84,14 +80,14 @@ impl CommandList {
         let mut current_entry = Vec::new();
         for line in lines.lines().filter(|x| !x.is_empty()) {
             if line == "---" {
-                entries.push(CommandEntry::new(&current_entry));
+                entries.push(CommandEntry::new(current_entry));
                 current_entry = Vec::new();
             } else {
                 current_entry.push(line.to_owned());
             }
         }
         if !current_entry.is_empty() {
-            entries.push(CommandEntry::new(&current_entry)); // add last started bookmark
+            entries.push(CommandEntry::new(current_entry)); // add last started bookmark
         }
 
         // remove entries to fit into max_size

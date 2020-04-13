@@ -53,30 +53,30 @@ impl EditorState {
     }
 
     pub fn content_to_commandentry(&self) -> CommandEntry {
-        CommandEntry::new(&self.lines)
+        CommandEntry::new(self.lines.clone())
     }
 
     pub fn load_commandentry(&mut self, entry: &CommandEntry) {
-        self.set_content(&entry.lines());
+        self.set_content(entry.lines().clone());
     }
 
-    pub fn set_content(&mut self, new_content: &Vec<String>) {
+    pub fn set_content(&mut self, new_content: Vec<String>) {
         // prevent setting _no_ lines, which would crash
         self.lines = if new_content.is_empty() {
             vec![String::new()]
         } else {
-            new_content.clone()
+            new_content
         };
         self.cursor_line = self.lines.len() - 1;
         self.cursor_col = self.current_line().len();
     }
 
     pub fn content_str(&self) -> String {
-        self.lines.join(" ").to_owned()
+        self.lines.join(" ")
     }
 
-    pub fn content_lines(&self) -> Vec<String> {
-        self.lines.to_owned()
+    pub fn content_lines(&self) -> &Vec<String> {
+        &self.lines
     }
 
     pub fn current_line(&self) -> &str {
@@ -169,7 +169,7 @@ impl EditorState {
             }
 
             EditorEvent::Clear => {
-                self.set_content(&vec![String::new()]);
+                self.set_content(vec![String::new()]);
             }
 
             EditorEvent::GoLeft => {
@@ -208,8 +208,8 @@ impl EditorState {
     }
 }
 
+#[cfg(test)]
 pub mod test {
-    #[allow(unused_imports)]
     use super::*;
 
     #[test]
@@ -217,7 +217,7 @@ pub mod test {
         let mut le = EditorState::new();
         assert_eq!(le.content_str(), "");
 
-        le.set_content(&vec!["hello".into(), "foo".into(), "bar".into()]);
+        le.set_content(vec!["hello".into(), "foo".into(), "bar".into()]);
         le.cursor_line = 0;
         le.cursor_col = 0;
         le.apply_event(EditorEvent::GoRight);
@@ -290,7 +290,7 @@ pub mod test {
     #[test]
     pub fn test_advanced() {
         let mut le = EditorState::new();
-        le.set_content(&vec!["as".to_string()]);
+        le.set_content(vec!["as".to_string()]);
         assert_eq!(le.content_str(), "as");
         assert_eq!(le.displayed_cursor_column(), 2 as usize);
 
@@ -298,7 +298,7 @@ pub mod test {
         assert_eq!(le.content_str(), "");
         assert_eq!(le.displayed_cursor_column(), 0 as usize);
 
-        le.set_content(&vec!["as as as".to_string()]);
+        le.set_content(vec!["as as as".to_string()]);
         assert_eq!(le.content_str(), "as as as");
         assert_eq!(le.displayed_cursor_column(), 8 as usize);
 
@@ -328,27 +328,27 @@ pub mod test {
         let mut le = EditorState::new();
 
         le.apply_event(EditorEvent::NewLine);
-        assert_eq!(le.content_lines(), vec!["", ""]);
+        assert_eq!(*le.content_lines(), vec!["", ""]);
         assert_eq!(le.cursor_line, 1);
 
         le.apply_event(EditorEvent::NewCharacter('a'));
-        assert_eq!(le.content_lines(), vec!["", "a"]);
+        assert_eq!(*le.content_lines(), vec!["", "a"]);
         assert_eq!(le.cursor_line, 1);
 
         le.apply_event(EditorEvent::GoUp);
-        assert_eq!(le.content_lines(), vec!["", "a"]);
+        assert_eq!(*le.content_lines(), vec!["", "a"]);
         assert_eq!(le.cursor_line, 0);
 
         le.apply_event(EditorEvent::GoDown);
-        assert_eq!(le.content_lines(), vec!["", "a"]);
+        assert_eq!(*le.content_lines(), vec!["", "a"]);
         assert_eq!(le.cursor_line, 1);
 
-        le.set_content(&vec!["a".into(), "b".into()]);
-        assert_eq!(le.content_lines(), vec!["a", "b"]);
+        le.set_content(vec!["a".into(), "b".into()]);
+        assert_eq!(*le.content_lines(), vec!["a", "b"]);
         assert_eq!(le.cursor_line, 1);
         le.apply_event(EditorEvent::Home);
         le.apply_event(EditorEvent::Backspace);
         assert_eq!(le.cursor_line, 0);
-        assert_eq!(le.content_lines(), vec!["ab"]);
+        assert_eq!(*le.content_lines(), vec!["ab"]);
     }
 }

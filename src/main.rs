@@ -50,7 +50,10 @@ fn main() -> Result<(), failure::Error> {
         return Ok(());
     }
 
-    let config = PiprConfig::load_from_file();
+    pub const CONFIG_DIR_RELATIVE_TO_HOME: &'static str = ".config/pipr/";
+    let config_path = Path::new(&env::var("HOME").unwrap()).join(CONFIG_DIR_RELATIVE_TO_HOME);
+
+    let config = PiprConfig::load_from_file(&config_path.join("config.toml"));
 
     let bubblewrap_available = which::which("bwrap").is_ok();
     let execution_mode = match matches.is_present("no-isolation") {
@@ -65,16 +68,12 @@ fn main() -> Result<(), failure::Error> {
 
     let executor = Executor::start_executor(execution_mode, config.eval_environment.clone());
 
-    pub const CONFIG_DIR_RELATIVE_TO_HOME: &'static str = ".config/pipr/";
-    let home_path = env::var("HOME").unwrap();
-    let config_path = Path::new(&home_path).join(CONFIG_DIR_RELATIVE_TO_HOME);
-
     let bookmarks = CommandList::load_from_file(config_path.join("bookmarks"), None);
     let history = CommandList::load_from_file(config_path.join("history"), Some(config.history_size));
 
     let mut app = App::new(executor, config.clone(), bookmarks, history);
     if let Some(default_value) = matches.value_of("default") {
-        app.input_state.set_content(&default_value.lines().map_into().collect());
+        app.input_state.set_content(default_value.lines().map_into().collect());
     }
 
     run_app(&mut app)?;

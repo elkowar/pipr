@@ -2,7 +2,6 @@ use super::command_evaluation::*;
 use super::commandlist::{CommandEntry, CommandList};
 use super::lineeditor::*;
 use super::pipr_config::*;
-
 use crossterm::event::{KeyCode, KeyModifiers};
 
 pub const HELP_TEXT: &str = "\
@@ -93,7 +92,7 @@ impl App {
                 self.input_state.load_commandentry(&self.history.get_at(new_idx).unwrap());
             } else {
                 self.history_idx = None;
-                self.input_state.set_content(&vec![String::new()]);
+                self.input_state.set_content(vec![String::new()]);
             }
         }
     }
@@ -117,7 +116,9 @@ impl App {
         self.should_quit = true;
         self.history.push(self.input_state.content_to_commandentry());
     }
+
     pub fn main_window_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
+        let control_pressed = modifiers.contains(KeyModifiers::CONTROL);
         if self.snippet_mode {
             if let KeyCode::Char(c) = code {
                 // TODO check for pipes and use without_pipe, also normalize spacing
@@ -130,26 +131,21 @@ impl App {
         } else {
             match code {
                 KeyCode::Esc => self.set_should_quit(),
-                KeyCode::Char('q') | KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => self.set_should_quit(),
+                KeyCode::Char('q') | KeyCode::Char('c') if control_pressed => self.set_should_quit(),
                 KeyCode::F(2) => self.autoeval_mode = !self.autoeval_mode,
                 KeyCode::F(3) => self.paranoid_history_mode = !self.paranoid_history_mode,
 
-                KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
-                    self.bookmarks.toggle_entry(self.input_state.content_to_commandentry());
-                }
-                KeyCode::Char('p') if modifiers.contains(KeyModifiers::CONTROL) => self.apply_history_prev(),
-                KeyCode::Char('n') if modifiers.contains(KeyModifiers::CONTROL) => self.apply_history_next(),
-                KeyCode::Char('x') if modifiers.contains(KeyModifiers::CONTROL) => {
+                KeyCode::Char('s') if control_pressed => self.bookmarks.toggle_entry(self.input_state.content_to_commandentry()),
+                KeyCode::Char('p') if control_pressed => self.apply_history_prev(),
+                KeyCode::Char('n') if control_pressed => self.apply_history_next(),
+                KeyCode::Char('x') if control_pressed => {
                     self.history.push(self.input_state.content_to_commandentry());
                     self.input_state.apply_event(EditorEvent::Clear);
                 }
 
-                KeyCode::Char('v') if modifiers.contains(KeyModifiers::CONTROL) => self.snippet_mode = true,
+                KeyCode::Char('v') if control_pressed => self.snippet_mode = true,
                 KeyCode::Enter => {
-                    if (self.history.len() == 0
-                        || self.history.get_at(self.history.len() - 1) != Some(&self.input_state.content_to_commandentry()))
-                        && !self.input_state.content_str().is_empty()
-                    {
+                    if !self.input_state.content_str().is_empty() {
                         self.history.push(self.input_state.content_to_commandentry());
                     }
                     let command = self.input_state.content_str();
@@ -159,7 +155,7 @@ impl App {
 
                 _ => {
                     if let Some(editor_event) = convert_keyevent_to_editorevent(code, modifiers) {
-                        let previous_content = self.input_state.content_str().clone();
+                        let previous_content = self.input_state.content_str();
                         self.input_state.apply_event(editor_event);
 
                         if previous_content != self.input_state.content_str() && self.autoeval_mode {
@@ -174,12 +170,13 @@ impl App {
     }
 
     pub fn on_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
+        let control_pressed = modifiers.contains(KeyModifiers::CONTROL);
         match code {
             KeyCode::F(1) => match self.window_state {
                 WindowState::TextView(_, _) => self.window_state = WindowState::Main,
                 _ => self.window_state = WindowState::TextView("Help".to_string(), HELP_TEXT.to_string()),
             },
-            KeyCode::Char('b') if modifiers.contains(KeyModifiers::CONTROL) => match self.window_state {
+            KeyCode::Char('b') if control_pressed => match self.window_state {
                 WindowState::BookmarkList(_) => self.window_state = WindowState::Main,
                 _ => {
                     self.history.push(self.input_state.content_to_commandentry());
@@ -188,7 +185,7 @@ impl App {
                     self.window_state = WindowState::BookmarkList(CommandListState::new(entries, None));
                 }
             },
-            KeyCode::Char('h') if modifiers.contains(KeyModifiers::CONTROL) => match self.window_state {
+            KeyCode::Char('h') if control_pressed => match self.window_state {
                 WindowState::HistoryList(_) => self.window_state = WindowState::Main,
                 _ => {
                     self.history.push(self.input_state.content_to_commandentry());

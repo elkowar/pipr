@@ -122,7 +122,8 @@ fn draw_command_list<B: Backend>(
 }
 
 fn draw_input_field<B: Backend>(mut f: &mut Frame<B>, rect: Rect, app: &App) {
-    let lines = app.input_state.content_lines().into_iter().map(|mut line| {
+    let lines = app.input_state.content_lines().iter().map(|line| {
+        let mut line = line.clone();
         if line.len() > rect.width as usize - 5 {
             line.truncate(rect.width as usize - 5);
             line.push_str("...");

@@ -3,7 +3,6 @@ name = "pipr"
 version = "0.0.8"
 authors = ["Leon Kowarschick"]
 edition = "2018"
-features = []
 license = "MIT"
 publish = true
 repository = "https://gitlab.com/Elkowar/pipr"
