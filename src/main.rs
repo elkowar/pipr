@@ -1,7 +1,4 @@
 extern crate clap;
-extern crate lazy_static;
-extern crate num_derive;
-extern crate num_traits;
 
 use clap::Arg;
 use itertools::Itertools;

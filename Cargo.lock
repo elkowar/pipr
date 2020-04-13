@@ -359,17 +359,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "num-derive"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c8b15b261814f992e33760b1fca9fe8b693d8a65299f20c9901688636cfb746"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "num-traits"
 version = "0.1.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -413,18 +402,14 @@ dependencies = [
 
 [[package]]
 name = "pipr"
-version = "0.1.0"
+version = "0.0.8"
 dependencies = [
  "clap",
  "config",
  "crossterm",
  "failure",
  "itertools 0.9.0",
- "lazy_static 0.2.11",
- "num-derive",
- "num-traits 0.2.11",
  "tui",
- "unicode-segmentation",
  "unicode-width",
  "which",
 ]

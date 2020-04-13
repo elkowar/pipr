@@ -1,9 +1,20 @@
 [package]
 name = "pipr"
-version = "0.1.0"
-authors = ["ElKowar <nope>"]
+version = "0.0.8"
+authors = ["Leon Kowarschick"]
 edition = "2018"
 features = []
+license = "MIT"
+publish = true
+repository = "https://gitlab.com/Elkowar/pipr"
+readme = "Readme.md"
+description = "A commandline-utility to interactively build complex shell pipelines"
+
+keywords = ["shell", "cli", "terminal", "utility", "tool"]
+categories = ["command-line-utilities", "development-tools", "text-editors"]
+
+[badges]
+gitlab = { repository = "https://gitlab.com/Elkowar/pipr", branch = "master" }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -12,11 +23,7 @@ tui = { version = "0.8", default-features = false, features = ['crossterm'] }
 config = { version = "0.9", features = ['toml'] }
 crossterm = "0.14"
 failure = "0.1.6"
-num-traits = "0.2"
-num-derive = "0.3"
 itertools = "0.9"
-unicode-segmentation = "1.6.0"
 unicode-width = "0.1.5"
 which = "3.1.1"
-lazy_static = "^0.2.8"
 clap = "2.33"
