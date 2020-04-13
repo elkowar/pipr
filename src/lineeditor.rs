@@ -211,6 +211,42 @@ impl EditorState {
 pub mod test {
     #[allow(unused_imports)]
     use super::*;
+
+    #[test]
+    pub fn test_movement_simple() {
+        let mut le = EditorState::new();
+        assert_eq!(le.content_str(), "");
+
+        le.set_content(&vec!["hello".into(), "foo".into(), "bar".into()]);
+        le.cursor_line = 0;
+        le.cursor_col = 0;
+        le.apply_event(EditorEvent::GoRight);
+        assert_eq!((le.cursor_col, le.cursor_line), (1, 0));
+
+        le.apply_event(EditorEvent::GoLeft);
+        assert_eq!((le.cursor_col, le.cursor_line), (0, 0));
+
+        le.apply_event(EditorEvent::GoLeft);
+        assert_eq!((le.cursor_col, le.cursor_line), (0, 0));
+
+        le.apply_event(EditorEvent::GoDown);
+        assert_eq!((le.cursor_col, le.cursor_line), (0, 1));
+
+        le.apply_event(EditorEvent::GoUp);
+        assert_eq!((le.cursor_col, le.cursor_line), (0, 0));
+
+        le.apply_event(EditorEvent::GoUp);
+        assert_eq!((le.cursor_col, le.cursor_line), (0, 0));
+
+        le.cursor_line = 1;
+        le.cursor_col = 0;
+        le.apply_event(EditorEvent::GoLeft);
+        assert_eq!((le.cursor_col, le.cursor_line), (5, 0));
+
+        le.apply_event(EditorEvent::GoRight);
+        assert_eq!((le.cursor_col, le.cursor_line), (0, 1));
+    }
+
     #[test]
     pub fn test_lineeditor_ascii() {
         let mut le = EditorState::new();
@@ -314,18 +350,5 @@ pub mod test {
         le.apply_event(EditorEvent::Backspace);
         assert_eq!(le.cursor_line, 0);
         assert_eq!(le.content_lines(), vec!["ab"]);
-
-        le.set_content(&vec!["abc".into(), "a".into()]);
-        assert_eq!(le.cursor_line, 1);
-        assert_eq!(le.cursor_col, 1);
-
-        le.apply_event(EditorEvent::GoUp);
-        assert_eq!(le.cursor_col, 1);
-        assert_eq!(le.cursor_line, 0);
-        le.apply_event(EditorEvent::End);
-        assert_eq!(le.cursor_col, 3);
-        le.apply_event(EditorEvent::GoDown);
-        assert_eq!(le.cursor_line, 1);
-        assert_eq!(le.cursor_col, 1);
     }
 }
