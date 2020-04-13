@@ -61,7 +61,9 @@ impl CommandList {
         self.entries.remove(idx);
     }
     pub fn remove_entry(&mut self, entry: &CommandEntry) {
-        self.entries.remove_item(&entry);
+        if let Some(idx) = self.entries.iter().position(|e| e == entry) {
+            self.entries.remove(idx);
+        }
         self.write_to_file();
     }
     pub fn toggle_entry(&mut self, entry: CommandEntry) {

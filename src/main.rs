@@ -1,4 +1,3 @@
-#![feature(vec_remove_item)]
 extern crate clap;
 extern crate lazy_static;
 extern crate num_derive;

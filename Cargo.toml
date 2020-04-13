@@ -3,7 +3,7 @@ name = "pipr"
 version = "0.1.0"
 authors = ["ElKowar <nope>"]
 edition = "2018"
-features = [ "vec_remove_item" ]
+features = []
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
