@@ -93,11 +93,8 @@ impl Executor {
 }
 
 fn start_command(execution_mode: &ExecutionMode, eval_environment: &Vec<String>, cmd: &str) -> Result<Child, &'static str> {
-    if cmd.contains("rm ") || cmd.contains("mv ") || cmd.contains("-i") || cmd.contains("dd ") {
-        return Err("Will not run this command, it's for your own good. Believe me.");
-    }
     match execution_mode {
-        ExecutionMode::UNSAFE => Ok(run_cmd_unsafe(eval_environment, cmd)),
+        ExecutionMode::UNSAFE => run_cmd_unsafe(eval_environment, cmd),
         ExecutionMode::ISOLATED(mounts) => Ok(run_cmd_isolated(mounts, eval_environment, cmd)),
     }
 }
@@ -127,17 +124,21 @@ fn run_cmd_isolated(mounts: &Vec<(String, String)>, eval_environment: &Vec<Strin
         .expect("Failed to execute process in bwrap. this might be a bwrap problem,... or not")
 }
 
-fn run_cmd_unsafe(eval_environment: &Vec<String>, cmd: &str) -> Child {
+fn run_cmd_unsafe(eval_environment: &Vec<String>, cmd: &str) -> Result<Child, &'static str> {
+    if cmd.contains("rm ") || cmd.contains("mv ") || cmd.contains("dd ") {
+        return Err("Will not run this command, it's for your own good. Believe me.");
+    }
     let mut eval_environment = eval_environment.into_iter();
     let mut command = Command::new(eval_environment.next().expect("eval_environment was empty"));
     for arg in eval_environment {
         command.arg(arg);
     }
-    command
+    let child = command
         .arg(cmd)
         .stdout(Stdio::piped())
         .stdin(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("failed to execute process")
+        .expect("failed to execute process");
+    Ok(child)
 }

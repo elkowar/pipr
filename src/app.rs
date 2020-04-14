@@ -8,14 +8,17 @@ pub const HELP_TEXT: &str = "\
 F1         Show/hide help
 F2         Toggle autoeval
 F3         Toggle Paranoid history (fills up history in autoeval)
+F4         Show/hide history
 Ctrl+B     Show/hide bookmarks
-Ctrl+H     Show/hide history
 Ctrl+S     Save bookmark
 Alt+Return Newline
 Ctrl+X     Clear Command
 Ctrl+P     Previous in history
 Ctrl+N     Next in history
 Ctrl+V     Start snippet mode (press the key for your Snippet to choose)
+
+disable a line by starting it with a #
+this will simply exclude the line from the executed command.
 
 Config file is in
 ~/.config/pipr/pipr.toml";
@@ -117,6 +120,19 @@ impl App {
         self.history.push(self.input_state.content_to_commandentry());
     }
 
+    pub fn execute_content(&mut self) {
+        let command = self.input_state.content_lines();
+        let command = command
+            .iter()
+            .filter(|line| !line.starts_with("#"))
+            .map(|x| x.to_owned())
+            .collect::<Vec<String>>()
+            .join(" ");
+
+        self.executor.execute(&command);
+        self.last_executed_cmd = self.input_state.content_str();
+    }
+
     pub fn main_window_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         let control_pressed = modifiers.contains(KeyModifiers::CONTROL);
         if self.snippet_mode {
@@ -148,9 +164,7 @@ impl App {
                     if !self.input_state.content_str().is_empty() {
                         self.history.push(self.input_state.content_to_commandentry());
                     }
-                    let command = self.input_state.content_str();
-                    self.executor.execute(&command);
-                    self.last_executed_cmd = command;
+                    self.execute_content();
                 }
 
                 _ => {
@@ -159,9 +173,7 @@ impl App {
                         self.input_state.apply_event(editor_event);
 
                         if previous_content != self.input_state.content_str() && self.autoeval_mode {
-                            let command = self.input_state.content_str();
-                            self.executor.execute(&command);
-                            self.last_executed_cmd = command;
+                            self.execute_content();
                         }
                     }
                 }
@@ -185,7 +197,7 @@ impl App {
                     self.window_state = WindowState::BookmarkList(CommandListState::new(entries, None));
                 }
             },
-            KeyCode::Char('h') if control_pressed => match self.window_state {
+            KeyCode::F(4) => match self.window_state {
                 WindowState::HistoryList(_) => self.window_state = WindowState::Main,
                 _ => {
                     self.history.push(self.input_state.content_to_commandentry());
