@@ -10,6 +10,7 @@ F2         Toggle autoeval
 F3         Toggle Paranoid history (fills up history in autoeval)
 F4         Show/hide history
 Ctrl+B     Show/hide bookmarks
+F5         Open man page of command under cursor
 Ctrl+S     Save bookmark
 Alt+Return Newline
 Ctrl+X     Clear Command
