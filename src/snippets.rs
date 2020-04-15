@@ -1,3 +1,4 @@
+use std::fmt::{self, Display, Formatter};
 #[derive(Debug, Clone, PartialEq)]
 pub struct Snippet {
     pub text: String,
@@ -14,6 +15,12 @@ impl Snippet {
 
     pub fn without_pipe(&self) -> &str {
         self.text.trim().trim_start_matches('|').trim()
+    }
+}
+
+impl Display for Snippet {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.text.trim())
     }
 }
 

@@ -1,7 +1,7 @@
-use super::command_evaluation::*;
-use super::commandlist::{CommandEntry, CommandList};
 use super::lineeditor::*;
-use super::pipr_config::*;
+use super::{command_list_window::CommandListState, pipr_config::*};
+use crate::command_evaluation::*;
+use crate::commandlist::CommandList;
 use crossterm::event::{KeyCode, KeyModifiers};
 
 pub const HELP_TEXT: &str = "\
@@ -22,12 +22,6 @@ this will simply exclude the line from the executed command.
 
 Config file is in
 ~/.config/pipr/pipr.toml";
-
-pub struct CommandListState {
-    pub list: Vec<CommandEntry>,
-    pub selected_idx: Option<usize>,
-    recently_deleted: Vec<CommandEntry>,
-}
 
 pub enum WindowState {
     Main,
@@ -75,33 +69,6 @@ impl App {
         }
     }
 
-    fn apply_history_prev(&mut self) {
-        if let Some(idx) = self.history_idx {
-            if idx > 0 {
-                self.history_idx = Some(idx - 1);
-                self.input_state.load_commandentry(&self.history.get_at(idx - 1).unwrap());
-            }
-        } else if self.history.len() > 0 {
-            let new_idx = self.history.len() - 1;
-            self.history_idx = Some(new_idx);
-            self.history.push(self.input_state.content_to_commandentry());
-            self.input_state.load_commandentry(&self.history.get_at(new_idx).unwrap());
-        }
-    }
-
-    fn apply_history_next(&mut self) {
-        if let Some(idx) = self.history_idx {
-            let new_idx = idx + 1;
-            if new_idx < self.history.len() - 1 {
-                self.history_idx = Some(new_idx);
-                self.input_state.load_commandentry(&self.history.get_at(new_idx).unwrap());
-            } else {
-                self.history_idx = None;
-                self.input_state.set_content(vec![String::new()]);
-            }
-        }
-    }
-
     pub fn on_cmd_output(&mut self, process_result: ProcessResult) {
         match process_result {
             ProcessResult::Ok(stdout) => {
@@ -133,59 +100,6 @@ impl App {
 
         self.executor.execute(&command);
         self.last_executed_cmd = self.input_state.content_str();
-    }
-
-    pub fn main_window_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
-        let control_pressed = modifiers.contains(KeyModifiers::CONTROL);
-        if self.snippet_mode {
-            if let KeyCode::Char(c) = code {
-                // TODO check for pipes and use without_pipe, also normalize spacing
-                if let Some(snippet) = self.config.snippets.get(&c) {
-                    self.input_state.insert_at_cursor(&snippet.text);
-                    self.input_state.cursor_col += snippet.cursor_offset;
-                }
-            }
-            self.snippet_mode = false;
-        } else {
-            match code {
-                KeyCode::Esc => self.set_should_quit(),
-                KeyCode::Char('q') | KeyCode::Char('c') if control_pressed => self.set_should_quit(),
-                KeyCode::F(2) => self.autoeval_mode = !self.autoeval_mode,
-                KeyCode::F(3) => self.paranoid_history_mode = !self.paranoid_history_mode,
-
-                KeyCode::F(5) => {
-                    let hovered_word = word_under_cursor(self.input_state.current_line(), self.input_state.cursor_col);
-                    self.opened_manpage = hovered_word.map(|x| x.to_string());
-                }
-
-                KeyCode::Char('s') if control_pressed => self.bookmarks.toggle_entry(self.input_state.content_to_commandentry()),
-                KeyCode::Char('p') if control_pressed => self.apply_history_prev(),
-                KeyCode::Char('n') if control_pressed => self.apply_history_next(),
-                KeyCode::Char('x') if control_pressed => {
-                    self.history.push(self.input_state.content_to_commandentry());
-                    self.input_state.apply_event(EditorEvent::Clear);
-                }
-
-                KeyCode::Char('v') if control_pressed => self.snippet_mode = true,
-                KeyCode::Enter => {
-                    if !self.input_state.content_str().is_empty() {
-                        self.history.push(self.input_state.content_to_commandentry());
-                    }
-                    self.execute_content();
-                }
-
-                _ => {
-                    if let Some(editor_event) = convert_keyevent_to_editorevent(code, modifiers) {
-                        let previous_content = self.input_state.content_str();
-                        self.input_state.apply_event(editor_event);
-
-                        if previous_content != self.input_state.content_str() && self.autoeval_mode {
-                            self.execute_content();
-                        }
-                    }
-                }
-            }
-        }
     }
 
     pub fn on_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
@@ -248,56 +162,6 @@ impl App {
                         _ => state.apply_event(code),
                     },
                 }
-            }
-        }
-    }
-}
-
-impl CommandListState {
-    pub fn new(list: Vec<CommandEntry>, selected_idx: Option<usize>) -> CommandListState {
-        CommandListState {
-            selected_idx: selected_idx.or(if list.len() == 0 { None } else { Some(list.len() - 1) }),
-            list,
-            recently_deleted: Vec::new(),
-        }
-    }
-    pub fn selected_entry(&self) -> Option<&CommandEntry> {
-        self.selected_idx.and_then(|idx| self.list.get(idx))
-    }
-
-    pub fn apply_event(&mut self, code: KeyCode) {
-        if let Some(selected_idx) = self.selected_idx {
-            match code {
-                KeyCode::PageUp | KeyCode::Char('g') => {
-                    self.selected_idx = if selected_idx >= 5 { Some(selected_idx - 5) } else { Some(0) };
-                }
-                KeyCode::PageDown | KeyCode::Char('G') if self.list.len() > 0 => {
-                    self.selected_idx = if (selected_idx as isize) < (self.list.len() as isize - 5) {
-                        Some(selected_idx + 5)
-                    } else {
-                        Some(self.list.len() - 1)
-                    };
-                }
-
-                KeyCode::Up | KeyCode::Char('k') if selected_idx > 0 => self.selected_idx = Some(selected_idx - 1),
-                KeyCode::Down | KeyCode::Char('j') if selected_idx < self.list.len() - 1 => {
-                    self.selected_idx = Some(selected_idx + 1)
-                }
-                KeyCode::Char('u') => {
-                    self.recently_deleted.pop().map(|entry| self.list.push(entry));
-                    self.selected_idx = Some(self.list.len() - 1);
-                }
-                KeyCode::Delete | KeyCode::Backspace => {
-                    let deleted_entry = self.list.remove(selected_idx);
-                    self.recently_deleted.push(deleted_entry);
-                    if self.list.is_empty() {
-                        self.selected_idx = None;
-                    } else if self.list.get(selected_idx).is_none() {
-                        self.selected_idx = Some(selected_idx - 1);
-                    }
-                }
-
-                _ => {}
             }
         }
     }

@@ -22,7 +22,7 @@ pub mod pipr_config;
 pub mod snippets;
 pub mod ui;
 
-pub use app::*;
+pub use app::app::*;
 pub use command_evaluation::*;
 pub use commandlist::CommandList;
 pub use lineeditor as le;

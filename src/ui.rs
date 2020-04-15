@@ -1,4 +1,5 @@
-use super::app::*;
+use crate::app::command_list_window::CommandListState;
+use crate::app::*;
 use crate::snippets::Snippet;
 use crossterm::{
     execute,
@@ -14,16 +15,6 @@ use tui::style::{Color, Modifier, Style};
 use tui::widgets::{Block, Borders, List, ListState, Paragraph, Text};
 use tui::{backend::Backend, backend::CrosstermBackend, Frame, Terminal};
 use Constraint::*;
-
-fn make_default_block(title: &str, selected: bool) -> Block {
-    let title_style = if selected {
-        Style::default().fg(Color::Black).bg(Color::Cyan)
-    } else {
-        Style::default().fg(Color::Cyan).bg(Color::Black)
-    };
-
-    Block::default().title(title).borders(Borders::ALL).title_style(title_style)
-}
 
 pub fn draw_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> Result<(), failure::Error> {
     if let Some(manpage) = &app.opened_manpage {
@@ -65,9 +56,8 @@ pub fn draw_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App
                 );
             }
             WindowState::TextView(title, text) => {
-                let paragraph_content = [Text::raw(text)];
                 f.render_widget(
-                    Paragraph::new(paragraph_content.iter()).block(make_default_block(title, true)),
+                    Paragraph::new([Text::raw(text)].iter()).block(make_default_block(title, true)),
                     root_rect,
                 );
             }
@@ -161,10 +151,7 @@ fn draw_input_field<B: Backend>(f: &mut Frame<B>, rect: Rect, app: &App) {
 }
 
 fn draw_snippet_list<B: Backend>(f: &mut Frame<B>, rect: Rect, snippets: &HashMap<char, Snippet>) {
-    let snippet_list = snippets
-        .iter()
-        .map(|(c, snippet)| c.to_string() + ": " + &snippet.text.trim());
-
+    let snippet_list = snippets.iter().map(|(c, snippet)| format!("{}: {}", c, snippet));
     f.render_widget(
         List::new(snippet_list.map(Text::raw)).block(make_default_block("Snippets", false)),
         rect,
@@ -181,10 +168,9 @@ fn draw_outputs<B: Backend>(f: &mut Frame<B>, rect: Rect, changed: bool, stdout:
         })
         .split(rect);
 
-    let stdout_item = [Text::raw(stdout)];
     let stdout_title = format!("Output{}", if changed { "" } else { " [+]" });
     f.render_widget(
-        Paragraph::new(stdout_item.iter()).block(make_default_block(&stdout_title, false)),
+        Paragraph::new([Text::raw(stdout)].iter()).block(make_default_block(&stdout_title, false)),
         output_chunks[0],
     );
 
@@ -194,4 +180,14 @@ fn draw_outputs<B: Backend>(f: &mut Frame<B>, rect: Rect, changed: bool, stdout:
             output_chunks[1],
         );
     }
+}
+
+fn make_default_block(title: &str, selected: bool) -> Block {
+    let title_style = if selected {
+        Style::default().fg(Color::Black).bg(Color::Cyan)
+    } else {
+        Style::default().fg(Color::Cyan).bg(Color::Black)
+    };
+
+    Block::default().title(title).borders(Borders::ALL).title_style(title_style)
 }
