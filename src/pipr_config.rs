@@ -82,12 +82,14 @@ impl PiprConfig {
             ]));
 
         PiprConfig {
-            finish_hook: settings.get("finish_hook").ok(),
-            paranoid_history_mode_default: settings.get("paranoid_history_mode_default").unwrap_or(false),
-            autoeval_mode_default: settings.get("autoeval_mode_default").unwrap_or(false),
-            eval_environment: settings.get("eval_environment").unwrap_or(vec!["bash".into(), "-c".into()]),
-            history_size: settings.get("history_size").unwrap_or(500),
-            cmdlist_always_show_preview: settings.get("cmdlist_always_show_preview").unwrap_or(false),
+            finish_hook: settings.get::<String>("finish_hook").ok(),
+            paranoid_history_mode_default: settings.get::<bool>("paranoid_history_mode_default").unwrap_or(false),
+            autoeval_mode_default: settings.get::<bool>("autoeval_mode_default").unwrap_or(false),
+            eval_environment: settings
+                .get::<Vec<String>>("eval_environment")
+                .unwrap_or(vec!["bash".into(), "-c".into()]),
+            history_size: settings.get::<usize>("history_size").unwrap_or(500),
+            cmdlist_always_show_preview: settings.get::<bool>("cmdlist_always_show_preview").unwrap_or(false),
             snippets,
             isolation_mounts_readonly,
         }

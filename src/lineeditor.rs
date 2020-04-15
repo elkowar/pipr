@@ -36,6 +36,7 @@ pub fn convert_keyevent_to_editorevent(code: KeyCode, modifiers: KeyModifiers) -
         KeyCode::Char('x') if modifiers.contains(KeyModifiers::CONTROL) => Some(EditorEvent::Clear),
         KeyCode::Char('w') if modifiers.contains(KeyModifiers::CONTROL) => Some(EditorEvent::KillWordBack),
         KeyCode::Char('\r') | KeyCode::Char('\n') if modifiers.contains(KeyModifiers::ALT) => Some(EditorEvent::NewLine),
+        KeyCode::Char('h') if modifiers.contains(KeyModifiers::CONTROL) => Some(EditorEvent::Backspace),
         KeyCode::Char(c) => Some(EditorEvent::NewCharacter(c)),
         KeyCode::Backspace => Some(EditorEvent::Backspace),
         KeyCode::Delete => Some(EditorEvent::Delete),

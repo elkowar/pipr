@@ -1,10 +1,9 @@
-extern crate clap;
-
-use clap::Arg;
+extern crate getopts;
+use getopts::Options;
 use itertools::Itertools;
 use std::env;
+use std::io;
 use std::io::Write;
-use std::io::{self, Read};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use tui::{backend::CrosstermBackend, Terminal};
@@ -30,36 +29,44 @@ pub use lineeditor as le;
 pub use pipr_config::*;
 
 fn main() -> Result<(), failure::Error> {
-    let matches = clap::App::new("Pipr")
-        .arg(Arg::with_name("stdin-default").long("stdin-default"))
-        .arg(Arg::with_name("no-isolation").long("no-isolation"))
-        .arg(Arg::with_name("default").long("default").default_value("").takes_value(true))
-        .get_matches();
+    // arguments
+    let args: Vec<String> = env::args().collect();
+    let program = args[0].clone();
+    let mut opts = Options::new();
+    opts.optopt("d", "default", "text inserted into the textfield on startup", "TEXT");
+    opts.optflag(
+        "",
+        "no-isolation",
+        "disable isolation. This will run the commands directly on your system, without protection. Take care.",
+    );
+    opts.optflag("h", "help", "print this help menu");
 
-    if matches.is_present("stdin-default") {
-        let mut supplied_input = String::new();
-        io::stdin().read_to_string(&mut supplied_input).unwrap();
-        let current_exe = std::env::current_exe()?;
-        dbg!(&current_exe);
-        let mut child_command = Command::new(current_exe);
-        child_command.arg("--default").arg(supplied_input);
-        for arg in std::env::args().skip(1).filter(|x| x != "--stdin-default") {
-            child_command.arg(arg);
-        }
-        child_command.spawn()?.wait_with_output()?;
-        return Ok(());
+    let matches = opts.parse(&args[1..]).unwrap();
+
+    let flag_help = matches.opt_present("help");
+    let opt_default_input = matches.opt_str("default");
+    let flag_no_isolation = matches.opt_present("no-isolation");
+
+    if flag_help {
+        let brief = format!("Usage: {} [options]", program);
+        print!("{}", opts.usage(&brief));
+        std::process::exit(0);
     }
+
+    // initialize
 
     pub const CONFIG_DIR_RELATIVE_TO_HOME: &'static str = ".config/pipr/";
     let config_path = Path::new(&env::var("HOME").unwrap()).join(CONFIG_DIR_RELATIVE_TO_HOME);
 
-    let config = PiprConfig::load_from_file(&config_path.join("config.toml"));
+    let config = PiprConfig::load_from_file(&config_path.join("pipr.toml"));
+
+    let execution_mode = if flag_no_isolation {
+        ExecutionMode::UNSAFE
+    } else {
+        ExecutionMode::ISOLATED(config.isolation_mounts_readonly.clone())
+    };
 
     let bubblewrap_available = which::which("bwrap").is_ok();
-    let execution_mode = match matches.is_present("no-isolation") {
-        true => ExecutionMode::UNSAFE,
-        false => ExecutionMode::ISOLATED(config.isolation_mounts_readonly.clone()),
-    };
 
     if !bubblewrap_available && execution_mode != ExecutionMode::UNSAFE {
         println!("bubblewrap installation not found. Please make sure you have `bwrap` on your path, or supply --no-isolation to disable safe-mode");
@@ -71,8 +78,11 @@ fn main() -> Result<(), failure::Error> {
     let bookmarks = CommandList::load_from_file(config_path.join("bookmarks"), None);
     let history = CommandList::load_from_file(config_path.join("history"), Some(config.history_size));
 
+    // create app and set default
+
     let mut app = App::new(executor, config.clone(), bookmarks, history);
-    if let Some(default_value) = matches.value_of("default") {
+
+    if let Some(default_value) = opt_default_input {
         app.input_state.set_content(default_value.lines().map_into().collect());
     }
 
@@ -109,6 +119,13 @@ fn run_app(mut app: &mut App) -> Result<(), failure::Error> {
     enable_raw_mode()?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
+
+    std::panic::set_hook(Box::new(|data| {
+        disable_raw_mode().unwrap();
+        #[allow(deprecated)]
+        execute!(io::stdout(), EnterAlternateScreen).unwrap();
+        eprintln!("{}", data);
+    }));
 
     while !app.should_quit {
         ui::draw_app(&mut terminal, &mut app)?;
