@@ -22,9 +22,9 @@ gitlab = { repository = "Elkowar/pipr", branch = "master" }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tui = { version = "0.8", default-features = false, features = ['crossterm'] }
+tui = { version = "0.9", default-features = false, features = ['crossterm'] }
 config = { version = "0.9", features = ['toml'] }
-crossterm = "0.14"
+crossterm = "0.17"
 failure = "0.1.6"
 itertools = "0.9"
 unicode-width = "0.1.5"
