@@ -3,53 +3,57 @@ use super::lineeditor::*;
 use crossterm::event::{KeyCode, KeyModifiers};
 
 impl App {
-    pub fn main_window_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
+    pub fn handle_snippet_mode_event(&mut self, code: KeyCode) {
+        if let KeyCode::Char(c) = code {
+            // TODO check for pipes and use without_pipe, also normalize spacing
+            if let Some(snippet) = self.config.snippets.get(&c) {
+                self.input_state.insert_at_cursor(&snippet.text);
+                self.input_state.cursor_col += snippet.cursor_offset;
+            }
+        }
+        self.snippet_mode = false;
+    }
+    pub fn handle_main_window_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         let control_pressed = modifiers.contains(KeyModifiers::CONTROL);
         if self.snippet_mode {
-            if let KeyCode::Char(c) = code {
-                // TODO check for pipes and use without_pipe, also normalize spacing
-                if let Some(snippet) = self.config.snippets.get(&c) {
-                    self.input_state.insert_at_cursor(&snippet.text);
-                    self.input_state.cursor_col += snippet.cursor_offset;
-                }
+            self.handle_snippet_mode_event(code);
+            return;
+        }
+
+        match code {
+            KeyCode::Esc => self.set_should_quit(),
+            KeyCode::Char('q') | KeyCode::Char('c') if control_pressed => self.set_should_quit(),
+            KeyCode::F(2) => self.autoeval_mode = !self.autoeval_mode,
+            KeyCode::F(3) => self.paranoid_history_mode = !self.paranoid_history_mode,
+
+            KeyCode::F(5) => {
+                let hovered_word = word_under_cursor(self.input_state.current_line(), self.input_state.cursor_col);
+                self.opened_manpage = hovered_word.map(|x| x.to_string());
             }
-            self.snippet_mode = false;
-        } else {
-            match code {
-                KeyCode::Esc => self.set_should_quit(),
-                KeyCode::Char('q') | KeyCode::Char('c') if control_pressed => self.set_should_quit(),
-                KeyCode::F(2) => self.autoeval_mode = !self.autoeval_mode,
-                KeyCode::F(3) => self.paranoid_history_mode = !self.paranoid_history_mode,
 
-                KeyCode::F(5) => {
-                    let hovered_word = word_under_cursor(self.input_state.current_line(), self.input_state.cursor_col);
-                    self.opened_manpage = hovered_word.map(|x| x.to_string());
-                }
+            KeyCode::Char('s') if control_pressed => self.bookmarks.toggle_entry(self.input_state.content_to_commandentry()),
+            KeyCode::Char('p') if control_pressed => self.apply_history_prev(),
+            KeyCode::Char('n') if control_pressed => self.apply_history_next(),
+            KeyCode::Char('x') if control_pressed => {
+                self.history.push(self.input_state.content_to_commandentry());
+                self.input_state.apply_event(EditorEvent::Clear);
+            }
 
-                KeyCode::Char('s') if control_pressed => self.bookmarks.toggle_entry(self.input_state.content_to_commandentry()),
-                KeyCode::Char('p') if control_pressed => self.apply_history_prev(),
-                KeyCode::Char('n') if control_pressed => self.apply_history_next(),
-                KeyCode::Char('x') if control_pressed => {
+            KeyCode::Char('v') if control_pressed => self.snippet_mode = true,
+            KeyCode::Enter => {
+                if !self.input_state.content_str().is_empty() {
                     self.history.push(self.input_state.content_to_commandentry());
-                    self.input_state.apply_event(EditorEvent::Clear);
                 }
+                self.execute_content();
+            }
 
-                KeyCode::Char('v') if control_pressed => self.snippet_mode = true,
-                KeyCode::Enter => {
-                    if !self.input_state.content_str().is_empty() {
-                        self.history.push(self.input_state.content_to_commandentry());
-                    }
-                    self.execute_content();
-                }
+            _ => {
+                if let Some(editor_event) = convert_keyevent_to_editorevent(code, modifiers) {
+                    let previous_content = self.input_state.content_str();
+                    self.input_state.apply_event(editor_event);
 
-                _ => {
-                    if let Some(editor_event) = convert_keyevent_to_editorevent(code, modifiers) {
-                        let previous_content = self.input_state.content_str();
-                        self.input_state.apply_event(editor_event);
-
-                        if previous_content != self.input_state.content_str() && self.autoeval_mode {
-                            self.execute_content();
-                        }
+                    if self.autoeval_mode && previous_content != self.input_state.content_str() {
+                        self.execute_content();
                     }
                 }
             }

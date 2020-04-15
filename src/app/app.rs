@@ -110,7 +110,9 @@ impl App {
                 _ => self.window_state = WindowState::TextView("Help".to_string(), HELP_TEXT.to_string()),
             },
             KeyCode::Char('b') if control_pressed => match self.window_state {
-                WindowState::BookmarkList(_) => self.window_state = WindowState::Main,
+                WindowState::BookmarkList(_) => {
+                    self.window_state = WindowState::Main;
+                }
                 _ => {
                     self.history.push(self.input_state.content_to_commandentry());
 
@@ -119,7 +121,9 @@ impl App {
                 }
             },
             KeyCode::F(4) => match self.window_state {
-                WindowState::HistoryList(_) => self.window_state = WindowState::Main,
+                WindowState::HistoryList(_) => {
+                    self.window_state = WindowState::Main;
+                }
                 _ => {
                     self.history.push(self.input_state.content_to_commandentry());
 
@@ -127,46 +131,49 @@ impl App {
                     self.window_state = WindowState::HistoryList(CommandListState::new(entries, self.history_idx));
                 }
             },
-            _ => {
-                let window_state = &mut self.window_state;
-                match window_state {
-                    WindowState::Main => self.main_window_tui_event(code, modifiers),
-                    WindowState::TextView(_, _) => self.window_state = WindowState::Main,
-                    WindowState::BookmarkList(state) => match code {
-                        KeyCode::Esc => {
-                            self.bookmarks.entries = state.list.clone();
-                            self.window_state = WindowState::Main;
-                        }
-                        KeyCode::Enter => {
-                            if let Some(entry) = state.selected_entry() {
-                                self.input_state.load_commandentry(entry);
-                            }
-                            self.bookmarks.entries = state.list.clone();
-                            self.window_state = WindowState::Main;
-                        }
-                        _ => state.apply_event(code),
-                    },
-                    WindowState::HistoryList(state) => match code {
-                        KeyCode::Esc => {
-                            self.history.entries = state.list.clone();
-                            self.window_state = WindowState::Main;
-                        }
-                        KeyCode::Enter => {
-                            if let Some(entry) = state.selected_idx.and_then(|idx| state.list.get(idx)) {
-                                self.input_state.load_commandentry(entry);
-                            }
-                            self.history.entries = state.list.clone();
-                            self.history_idx = state.selected_idx;
-                            self.window_state = WindowState::Main;
-                        }
-                        _ => state.apply_event(code),
-                    },
+            _ => self.handle_window_specific_event(code, modifiers),
+        }
+    }
+
+    pub fn handle_window_specific_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
+        let window_state = &mut self.window_state;
+        match window_state {
+            WindowState::Main => self.handle_main_window_tui_event(code, modifiers),
+            WindowState::TextView(_, _) => self.window_state = WindowState::Main,
+            WindowState::BookmarkList(state) => match code {
+                KeyCode::Esc => {
+                    self.bookmarks.entries = state.list.clone();
+                    self.window_state = WindowState::Main;
                 }
-            }
+                KeyCode::Enter => {
+                    if let Some(entry) = state.selected_entry() {
+                        self.input_state.load_commandentry(entry);
+                    }
+                    self.bookmarks.entries = state.list.clone();
+                    self.window_state = WindowState::Main;
+                }
+                _ => state.apply_event(code),
+            },
+            WindowState::HistoryList(state) => match code {
+                KeyCode::Esc => {
+                    self.history.entries = state.list.clone();
+                    self.window_state = WindowState::Main;
+                }
+                KeyCode::Enter => {
+                    if let Some(entry) = state.selected_idx.and_then(|idx| state.list.get(idx)) {
+                        self.input_state.load_commandentry(entry);
+                    }
+                    self.history.entries = state.list.clone();
+                    self.history_idx = state.selected_idx;
+                    self.window_state = WindowState::Main;
+                }
+                _ => state.apply_event(code),
+            },
         }
     }
 }
 
+/// returns the word at the given byte index.
 pub fn word_under_cursor(line: &str, cursor_col: usize) -> Option<&str> {
     let words = line.split_whitespace().collect::<Vec<&str>>();
     let mut hovered_word = None;
