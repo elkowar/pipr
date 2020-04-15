@@ -1,5 +1,12 @@
 use super::app::*;
-use std::io::{self, Stdout, Write};
+use crossterm::{
+    execute,
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen},
+};
+use std::{
+    io::{self, Stdout, Write},
+    process::Command,
+};
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
 use tui::widgets::{Block, Borders, List, Paragraph, SelectableList, Text, Widget};
@@ -17,6 +24,15 @@ fn make_default_block(title: &str, selected: bool) -> Block {
 }
 
 pub fn draw_app(mut terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> Result<(), failure::Error> {
+    if let Some(manpage) = &app.opened_manpage {
+        execute!(io::stdout(), LeaveAlternateScreen)?;
+        Command::new("man").arg(manpage).spawn().unwrap().wait().unwrap();
+        execute!(io::stdout(), EnterAlternateScreen)?;
+        std::io::Write::flush(&mut terminal.backend_mut())?;
+        app.opened_manpage = None;
+        return Ok(());
+    }
+
     let mut input_field_rect = tui::layout::Rect::new(0, 0, 0, 0);
     terminal.draw(|mut f| {
         let root_rect = f.size();

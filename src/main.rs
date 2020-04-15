@@ -123,7 +123,7 @@ fn run_app(mut app: &mut App) -> Result<(), failure::Error> {
     std::panic::set_hook(Box::new(|data| {
         disable_raw_mode().unwrap();
         #[allow(deprecated)]
-        execute!(io::stdout(), EnterAlternateScreen).unwrap();
+        execute!(io::stdout(), LeaveAlternateScreen).unwrap();
         eprintln!("{}", data);
     }));
 

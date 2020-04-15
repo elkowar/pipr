@@ -46,6 +46,7 @@ pub struct App {
     pub window_state: WindowState,
     pub bookmarks: CommandList,
     pub history: CommandList,
+    pub opened_manpage: Option<String>,
     pub history_idx: Option<usize>,
     pub executor: Executor,
     pub config: PiprConfig,
@@ -63,6 +64,7 @@ impl App {
             last_executed_cmd: "".into(),
             autoeval_mode: config.autoeval_mode_default,
             paranoid_history_mode: config.paranoid_history_mode_default,
+            opened_manpage: None,
             should_quit: false,
             history_idx: None,
             snippet_mode: false,
@@ -150,6 +152,11 @@ impl App {
                 KeyCode::Char('q') | KeyCode::Char('c') if control_pressed => self.set_should_quit(),
                 KeyCode::F(2) => self.autoeval_mode = !self.autoeval_mode,
                 KeyCode::F(3) => self.paranoid_history_mode = !self.paranoid_history_mode,
+
+                KeyCode::F(5) => {
+                    let hovered_word = word_under_cursor(self.input_state.current_line(), self.input_state.cursor_col);
+                    self.opened_manpage = hovered_word.map(|x| x.to_string());
+                }
 
                 KeyCode::Char('s') if control_pressed => self.bookmarks.toggle_entry(self.input_state.content_to_commandentry()),
                 KeyCode::Char('p') if control_pressed => self.apply_history_prev(),
@@ -293,5 +300,38 @@ impl CommandListState {
                 _ => {}
             }
         }
+    }
+}
+
+pub fn word_under_cursor(line: &str, cursor_col: usize) -> Option<&str> {
+    let words = line.split_whitespace().collect::<Vec<&str>>();
+    let mut hovered_word = None;
+    if words.len() == 1 {
+        hovered_word = Some(line);
+    }
+    for idx in 0..words.len() {
+        let len = words.clone().into_iter().take(idx + 1).collect::<Vec<&str>>().join(" ").len();
+        if len > cursor_col {
+            hovered_word = words.get(idx).cloned();
+            break;
+        }
+    }
+    hovered_word
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn test_word_under_cursor() {
+        assert_eq!(word_under_cursor("abc def ghi", 5), Some("def"));
+        assert_eq!(word_under_cursor("abc def ghi", 2), Some("abc"));
+        assert_eq!(word_under_cursor("abc def ghi", 0), Some("abc"));
+        assert_eq!(word_under_cursor("abc def ghi", 10), Some("ghi"));
+        assert_eq!(word_under_cursor("abc def ghi", 11), None);
+        assert_eq!(word_under_cursor("", 0), None);
+        assert_eq!(word_under_cursor("", 2), None);
+        assert_eq!(word_under_cursor("abc", 0), Some("abc"));
+        assert_eq!(word_under_cursor("abc", 3), Some("abc"));
     }
 }
