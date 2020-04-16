@@ -43,16 +43,25 @@ fn main() -> Result<(), failure::Error> {
         "disable isolation. This will run the commands directly on your system, without protection. Take care.",
     );
     opts.optflag("h", "help", "print this help menu");
+    opts.optflag(
+        "",
+        "config-reference",
+        "print out the default configuration file, with comments",
+    );
 
     let matches = opts.parse(&args[1..]).unwrap();
 
     let flag_help = matches.opt_present("help");
     let opt_default_input = matches.opt_str("default");
     let flag_no_isolation = matches.opt_present("no-isolation");
+    let flag_config_reference = matches.opt_present("config-reference");
 
     if flag_help {
         let brief = format!("Usage: {} [options]", program);
         print!("{}", opts.usage(&brief));
+        std::process::exit(0);
+    } else if flag_config_reference {
+        println!("{}", pipr_config::DEFAULT_CONFIG);
         std::process::exit(0);
     }
 
@@ -95,7 +104,6 @@ fn main() -> Result<(), failure::Error> {
     run_app(&mut app)?;
 
     after_finish(&app)?;
-    println!("{:?}", config);
 
     Ok(())
 }
