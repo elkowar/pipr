@@ -14,8 +14,7 @@ impl App {
             }
             KeySelectMenuType::OpenWordIn(word) => {
                 if let Some(help_viewer) = self.config.help_viewers.get(&c) {
-                    let help_command = help_viewer.replace("_", &word);
-                    self.should_jump_to_other_cmd = Some(vec!["bash".into(), "-c".into(), help_command]);
+                    self.should_jump_to_other_cmd = Some(help_viewer.resolve_to_command(&word));
                 }
             }
         }
@@ -40,7 +39,7 @@ impl App {
                 let hovered_word = word_under_cursor(self.input_state.current_line(), self.input_state.cursor_col);
                 if let Some(word) = hovered_word {
                     let help_viewers = &self.config.help_viewers;
-                    let options = help_viewers.iter().map(|(&k, v)| (k, v.replace("_", &word))).collect();
+                    let options = help_viewers.iter().map(|(&k, v)| (k, v.resolve(word))).collect();
                     let key_select_menu = KeySelectMenu::new(options, KeySelectMenuType::OpenWordIn(word.into()));
                     self.opened_key_select_menu = Some(key_select_menu);
                 }
@@ -56,11 +55,7 @@ impl App {
 
             KeyCode::Char('v') if control_pressed => {
                 self.opened_key_select_menu = Some(KeySelectMenu::new(
-                    self.config
-                        .snippets
-                        .iter()
-                        .map(|(&c, v)| (c, v.to_string()))
-                        .collect::<Vec<_>>(),
+                    self.config.snippets.iter().map(|(&c, v)| (c, v.to_string())).collect(),
                     KeySelectMenuType::Snippets,
                 ));
             }

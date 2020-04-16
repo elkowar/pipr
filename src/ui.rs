@@ -4,10 +4,7 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
 };
-use std::{
-    io::{self, Stdout, Write},
-    process::Command,
-};
+use std::io::{self, Stdout, Write};
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
 use tui::widgets::{Block, Borders, List, ListState, Paragraph, Text};
@@ -15,19 +12,11 @@ use tui::{backend::Backend, backend::CrosstermBackend, Frame, Terminal};
 use Constraint::*;
 
 pub fn draw_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> Result<(), failure::Error> {
-    if let Some(should_jump_to_other_cmd) = app.should_jump_to_other_cmd.take() {
-        let mut command_args = should_jump_to_other_cmd.iter();
-        if let Some(command) = command_args.next() {
-            let mut command = Command::new(command);
-            for arg in command_args {
-                command.arg(arg);
-            }
-
-            execute!(io::stdout(), LeaveAlternateScreen)?;
-            command.spawn()?.wait()?;
-            execute!(io::stdout(), EnterAlternateScreen)?;
-            terminal.resize(terminal.size()?)?; // this will redraw the whole screen
-        }
+    if let Some(mut should_jump_to_other_cmd) = app.should_jump_to_other_cmd.take() {
+        execute!(io::stdout(), LeaveAlternateScreen)?;
+        should_jump_to_other_cmd.spawn()?.wait()?;
+        execute!(io::stdout(), EnterAlternateScreen)?;
+        terminal.resize(terminal.size()?)?; // this will redraw the whole screen
     }
 
     let mut input_field_rect = tui::layout::Rect::new(0, 0, 0, 0);
@@ -113,11 +102,11 @@ fn draw_command_list<B: Backend>(f: &mut Frame<B>, rect: Rect, always_show_previ
         .constraints([Percentage(if show_preview { 60 } else { 100 }), Percentage(100)].as_ref())
         .split(rect);
 
-    let items = state
+    let items: Vec<String> = state
         .list
         .iter()
-        .map(|entry| str::replace(&entry.as_string(), "\n", " ↵ "))
-        .collect::<Vec<String>>();
+        .map(|entry| entry.as_string().replace("\n", " ↵ "))
+        .collect();
 
     let mut list_state = ListState::default();
     list_state.select(state.selected_idx);

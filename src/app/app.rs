@@ -1,5 +1,5 @@
 use super::lineeditor::*;
-use super::{command_list_window::CommandListState, key_select_menu::KeySelectMenu, pipr_config::*};
+use super::{command_list_window::CommandListState, key_select_menu::KeySelectMenu, pipr_config::*, Command};
 use crate::command_evaluation::*;
 use crate::commandlist::CommandList;
 use crossterm::event::{KeyCode, KeyModifiers};
@@ -10,13 +10,13 @@ F2         Toggle autoeval
 F3         Toggle Paranoid history (fills up history in autoeval)
 F4         Show/hide history
 Ctrl+B     Show/hide bookmarks
-F5         Open man page of command under cursor
+F5         Open helpviewer
 Ctrl+S     Save bookmark
 Alt+Return Newline
 Ctrl+X     Clear Command
 Ctrl+P     Previous in history
 Ctrl+N     Next in history
-Ctrl+V     Start snippet mode (press the key for your Snippet to choose)
+Ctrl+V     Insert snippet (press corresponding key to choose)
 
 disable a line by starting it with a #
 this will simply exclude the line from the executed command.
@@ -51,7 +51,10 @@ pub struct App {
     pub config: PiprConfig,
     pub should_quit: bool,
     pub opened_key_select_menu: Option<KeySelectMenu<KeySelectMenuType>>,
-    pub should_jump_to_other_cmd: Option<Vec<String>>, // describes the command + args starting the program
+
+    /// A command that should be executed in the main screen.
+    /// this will be taken ( and thus reset ) and handled by the ui module.
+    pub should_jump_to_other_cmd: Option<Command>,
 }
 
 impl App {

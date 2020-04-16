@@ -6,6 +6,10 @@ pub struct Snippet {
 }
 
 impl Snippet {
+    pub fn new(text: String, cursor_offset: usize) -> Snippet {
+        Snippet { text, cursor_offset }
+    }
+
     pub fn parse(s: &str) -> Snippet {
         Snippet {
             text: str::replace(s, "||", ""),
@@ -29,32 +33,14 @@ mod test {
     use super::Snippet;
     #[test]
     fn test_parsing() {
-        assert_eq!(
-            Snippet::parse("ab||c"),
-            Snippet {
-                text: "abc".into(),
-                cursor_offset: 2
-            }
-        );
-        assert_eq!(
-            Snippet::parse("abc"),
-            Snippet {
-                text: "abc".into(),
-                cursor_offset: 3
-            }
-        )
+        assert_eq!(Snippet::parse("ab||c"), Snippet::new("abc".into(), 2));
+        assert_eq!(Snippet::parse("abc"), Snippet::new("abc".into(), 3));
     }
     #[test]
     fn test_without_pipe() {
-        let snippet = Snippet {
-            text: " | abc".into(),
-            cursor_offset: 0,
-        };
+        let snippet = Snippet::new(" | abc".into(), 0);
         assert_eq!(snippet.without_pipe(), "abc");
-        let snippet = Snippet {
-            text: "abc".into(),
-            cursor_offset: 0,
-        };
+        let snippet = Snippet::new("abc".into(), 0);
         assert_eq!(snippet.without_pipe(), "abc");
     }
 }

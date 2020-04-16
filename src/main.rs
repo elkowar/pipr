@@ -18,6 +18,7 @@ use crossterm::{
 
 pub mod app;
 pub mod command_evaluation;
+pub mod command_template;
 pub mod commandlist;
 pub mod lineeditor;
 pub mod pipr_config;
@@ -65,7 +66,10 @@ fn main() -> Result<(), failure::Error> {
     let execution_mode = if flag_no_isolation {
         ExecutionMode::UNSAFE
     } else {
-        ExecutionMode::ISOLATED(config.isolation_mounts_readonly.clone())
+        ExecutionMode::ISOLATED {
+            additional_mounts: config.isolation_mounts_readonly.clone(),
+            additional_path_entries: config.isolation_path_additions.clone(),
+        }
     };
 
     let bubblewrap_available = which::which("bwrap").is_ok();
@@ -91,6 +95,7 @@ fn main() -> Result<(), failure::Error> {
     run_app(&mut app)?;
 
     after_finish(&app)?;
+    println!("{:?}", config);
 
     Ok(())
 }

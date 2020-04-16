@@ -6,7 +6,10 @@ use std::thread;
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum ExecutionMode {
     UNSAFE,
-    ISOLATED(Vec<(String, String)>),
+    ISOLATED {
+        additional_mounts: Vec<(String, String)>,
+        additional_path_entries: Vec<String>,
+    },
 }
 
 pub struct Executor {
@@ -101,20 +104,42 @@ impl Executor {
 fn start_command(execution_mode: &ExecutionMode, eval_environment: &Vec<String>, cmd: &str) -> Result<Child, &'static str> {
     match execution_mode {
         ExecutionMode::UNSAFE => run_cmd_unsafe(eval_environment, cmd),
-        ExecutionMode::ISOLATED(mounts) => Ok(run_cmd_isolated(mounts, eval_environment, cmd)),
+        ExecutionMode::ISOLATED {
+            additional_mounts,
+            additional_path_entries,
+        } => Ok(run_cmd_isolated(
+            additional_mounts,
+            additional_path_entries,
+            eval_environment,
+            cmd,
+        )),
     }
 }
 
-fn run_cmd_isolated(mounts: &Vec<(String, String)>, eval_environment: &Vec<String>, cmd: &str) -> Child {
+fn run_cmd_isolated(
+    mounts: &Vec<(String, String)>,
+    additional_path_entries: &Vec<String>,
+    eval_environment: &Vec<String>,
+    cmd: &str,
+) -> Child {
     let args = "--ro-bind ./ /working_directory --chdir /working_directory \
                 --tmpfs /tmp --proc /proc --dev /dev --die-with-parent --share-net --unshare-pid";
     let mut command = Command::new("bwrap");
     for arg in args.split(" ") {
         command.arg(arg);
     }
-    for mount in mounts {
-        command.arg("--ro-bind").arg(&mount.0).arg(&mount.1);
+    for (on_host, in_isolated) in mounts {
+        command.arg("--ro-bind").arg(&on_host).arg(&in_isolated);
     }
+
+    if !additional_path_entries.is_empty() {
+        let mut path_variable = std::env::var("PATH").unwrap();
+        for path_entry in additional_path_entries {
+            path_variable.push_str(&format!(":{}", path_entry));
+        }
+        command.env("PATH", path_variable);
+    }
+
     let mut eval_environment = eval_environment.into_iter();
 
     command.arg(eval_environment.next().expect("eval_environment was empty"));

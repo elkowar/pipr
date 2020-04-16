@@ -4,8 +4,9 @@ use std::io::prelude::*;
 use std::path::PathBuf;
 
 use super::snippets::*;
+use crate::command_template::CommandTemplate;
 
-const DEFAULT_CONFIG: &str = "
+pub const DEFAULT_CONFIG: &str = "
 #  ____  _
 # |  _ \\(_)_ __  _ __      .__________.
 # | |_) | | '_ \\| '__|     |__________|
@@ -33,6 +34,11 @@ eval_environment = [\"bash\", \"-c\"]
 # Syntax: '<on_host>:<in_isolated>'
 isolation_mounts_readonly = ['/lib:/lib', '/usr:/usr', '/lib64:/lib64', '/bin:/bin', '/etc:/etc']
 
+# Add paths info the isolated environments $PATH.
+# for example, you might mount your '~/.local/bin' to '/local_bin', 
+# and then add '/local_bin' to the isolation_path_additions.
+isolation_path_additions = []
+
 # Snippets can be used to quickly insert common bits of shell
 # use || (two pipes) where you want your cursor to be after insertion
 
@@ -40,21 +46,22 @@ isolation_mounts_readonly = ['/lib:/lib', '/usr:/usr', '/lib64:/lib64', '/bin:/b
 s = \" | sed -r 's/||//g'\"
 
 [help_viewers]
-'m' = \"man _\"
-'h' = \"_ --help | less\"
+'m' = \"man ??\"
+'h' = \"?? --help | less\"
 ";
 
 #[derive(Debug, Clone)]
 pub struct PiprConfig {
     pub finish_hook: Option<String>,
     pub isolation_mounts_readonly: Vec<(String, String)>,
+    pub isolation_path_additions: Vec<String>,
     pub cmdlist_always_show_preview: bool,
     pub paranoid_history_mode_default: bool,
     pub eval_environment: Vec<String>,
     pub autoeval_mode_default: bool,
     pub history_size: usize,
     pub snippets: HashMap<char, Snippet>,
-    pub help_viewers: HashMap<char, String>,
+    pub help_viewers: HashMap<char, CommandTemplate>,
 }
 
 impl PiprConfig {
@@ -86,13 +93,19 @@ impl PiprConfig {
                 "/etc:/etc".into(),
             ]));
 
-        let help_viewers = settings.get::<HashMap<char, String>>("help_viewers").unwrap_or(hashmap! {
-            'm' => "man _".into(),
-            'h' => "_ --help | less".into(),
-        });
+        let help_viewers = settings
+            .get::<HashMap<char, String>>("help_viewers")
+            .unwrap_or(hashmap! {
+                'm' => "man ??".into(),
+                'h' => "?? --help | less".into(),
+            })
+            .into_iter()
+            .map(|(k, v)| (k, CommandTemplate::from_string(v).unwrap()))
+            .collect::<HashMap<_, _>>();
 
         PiprConfig {
             finish_hook: settings.get::<String>("finish_hook").ok(),
+            isolation_path_additions: settings.get::<Vec<String>>("isolation_path_additions").unwrap_or(Vec::new()),
             paranoid_history_mode_default: settings.get::<bool>("paranoid_history_mode_default").unwrap_or(false),
             autoeval_mode_default: settings.get::<bool>("autoeval_mode_default").unwrap_or(false),
             eval_environment: settings
