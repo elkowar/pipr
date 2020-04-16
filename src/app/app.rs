@@ -40,7 +40,6 @@ pub struct App {
     pub input_state: EditorState,
     pub command_output: String,
     pub command_error: String,
-    pub help_output: Option<String>,
     pub autoeval_mode: bool,
     pub last_executed_cmd: String,
     pub paranoid_history_mode: bool,
@@ -62,7 +61,6 @@ impl App {
             input_state: EditorState::new(),
             command_output: "".into(),
             command_error: "".into(),
-            help_output: None,
             last_executed_cmd: "".into(),
             autoeval_mode: config.autoeval_mode_default,
             paranoid_history_mode: config.paranoid_history_mode_default,
@@ -78,7 +76,6 @@ impl App {
     }
 
     pub fn on_cmd_output(&mut self, process_result: ProcessResult) {
-        self.help_output = None;
         match process_result {
             ProcessResult::Ok(stdout) => {
                 if self.paranoid_history_mode {

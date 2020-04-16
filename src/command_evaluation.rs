@@ -57,16 +57,16 @@ impl Executor {
                     if let Some(status) = handle.try_wait().unwrap() {
                         // if yes, send out it's output
                         let command_output = handle.wait_with_output().unwrap();
+
+                        const ERROR_MSG_UNDECODABLE_OUTPUT: &str =
+                            "This program tried to print something to stdout which could not be decoded as utf8. Sorry.";
+
                         let result = if status.success() {
-                            let stdout = str::from_utf8(&command_output.stdout)
-                                .expect("couldn't encode stdout as utf8, there might be some strange characters in there...")
-                                .to_owned();
-                            ProcessResult::Ok(stdout)
+                            let stdout = str::from_utf8(&command_output.stdout).unwrap_or(ERROR_MSG_UNDECODABLE_OUTPUT);
+                            ProcessResult::Ok(stdout.to_owned())
                         } else {
-                            let stderr = str::from_utf8(&command_output.stderr)
-                                .expect("couldn't encode stderr as utf8, there might be some strange characters in there...")
-                                .to_owned();
-                            ProcessResult::NotOk(stderr)
+                            let stderr = str::from_utf8(&command_output.stderr).unwrap_or(ERROR_MSG_UNDECODABLE_OUTPUT);
+                            ProcessResult::NotOk(stderr.to_owned())
                         };
 
                         cmd_out_send.send(result).unwrap();

@@ -38,6 +38,10 @@ isolation_mounts_readonly = ['/lib:/lib', '/usr:/usr', '/lib64:/lib64', '/bin:/b
 
 [snippets]
 s = \" | sed -r 's/||//g'\"
+
+[help_viewers]
+'m' = \"man _\"
+'h' = \"_ --help | less\"
 ";
 
 #[derive(Debug, Clone)]
@@ -50,6 +54,7 @@ pub struct PiprConfig {
     pub autoeval_mode_default: bool,
     pub history_size: usize,
     pub snippets: HashMap<char, Snippet>,
+    pub help_viewers: HashMap<char, String>,
 }
 
 impl PiprConfig {
@@ -81,6 +86,11 @@ impl PiprConfig {
                 "/etc:/etc".into(),
             ]));
 
+        let help_viewers = settings.get::<HashMap<char, String>>("help_viewers").unwrap_or(hashmap! {
+            'm' => "man _".into(),
+            'h' => "_ --help | less".into(),
+        });
+
         PiprConfig {
             finish_hook: settings.get::<String>("finish_hook").ok(),
             paranoid_history_mode_default: settings.get::<bool>("paranoid_history_mode_default").unwrap_or(false),
@@ -90,6 +100,7 @@ impl PiprConfig {
                 .unwrap_or(vec!["bash".into(), "-c".into()]),
             history_size: settings.get::<usize>("history_size").unwrap_or(500),
             cmdlist_always_show_preview: settings.get::<bool>("cmdlist_always_show_preview").unwrap_or(false),
+            help_viewers,
             snippets,
             isolation_mounts_readonly,
         }

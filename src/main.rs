@@ -1,3 +1,5 @@
+#[macro_use]
+extern crate maplit;
 extern crate getopts;
 use getopts::Options;
 use itertools::Itertools;

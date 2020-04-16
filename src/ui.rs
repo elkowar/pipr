@@ -16,19 +16,18 @@ use Constraint::*;
 
 pub fn draw_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> Result<(), failure::Error> {
     if let Some(should_jump_to_other_cmd) = app.should_jump_to_other_cmd.take() {
-        execute!(io::stdout(), LeaveAlternateScreen)?;
         let mut command_args = should_jump_to_other_cmd.iter();
-        let mut command = Command::new(
-            command_args
-                .next()
-                .expect("should_jump_to_other_cmd had an empty command. Please report this, this should be impossible"),
-        );
-        for arg in command_args {
-            command.arg(arg);
+        if let Some(command) = command_args.next() {
+            let mut command = Command::new(command);
+            for arg in command_args {
+                command.arg(arg);
+            }
+
+            execute!(io::stdout(), LeaveAlternateScreen)?;
+            command.spawn()?.wait()?;
+            execute!(io::stdout(), EnterAlternateScreen)?;
+            terminal.resize(terminal.size()?)?; // this will redraw the whole screen
         }
-        command.spawn()?.wait()?;
-        execute!(io::stdout(), EnterAlternateScreen)?;
-        terminal.resize(terminal.size()?)?; // this will redraw the whole screen
     }
 
     let mut input_field_rect = tui::layout::Rect::new(0, 0, 0, 0);
@@ -64,20 +63,13 @@ pub fn draw_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App
                 input_field_rect = exec_chunks[0];
                 draw_input_field(&mut f, input_field_rect, &app);
 
-                if let Some(help_output) = &app.help_output {
-                    f.render_widget(
-                        Paragraph::new([Text::raw(help_output)].iter()).block(make_default_block("Help", false)),
-                        exec_chunks[1],
-                    );
-                } else {
-                    draw_outputs(
-                        &mut f,
-                        exec_chunks[1],
-                        &app.input_state.content_str() == &app.last_executed_cmd,
-                        &app.command_output,
-                        &app.command_error,
-                    );
-                }
+                draw_outputs(
+                    &mut f,
+                    exec_chunks[1],
+                    &app.input_state.content_str() == &app.last_executed_cmd,
+                    &app.command_output,
+                    &app.command_error,
+                );
             }
             WindowState::TextView(title, text) => {
                 f.render_widget(
