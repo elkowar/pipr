@@ -30,3 +30,7 @@ itertools = "0.9"
 unicode-width = "0.1.5"
 which = "3.1.1"
 getopts="0.2"
+
+[profile.release]
+opt-level = 'z'  # Optimize for size.
+lto = true  # enable link time optimization -> can reduce size
