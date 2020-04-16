@@ -1,6 +1,6 @@
 [package]
 name = "pipr"
-version = "0.0.8"
+version = "0.0.9"
 authors = ["Leon Kowarschick"]
 edition = "2018"
 license = "MIT"
@@ -33,5 +33,4 @@ getopts="0.2"
 maplit = "1.0"
 
 [profile.release]
-opt-level = 'z'  # Optimize for size.
 lto = true  # enable link time optimization -> can reduce size

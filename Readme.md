@@ -23,6 +23,12 @@ that can be inserted with the press of a button.
 These can be used to insert common stuff like `sed -r 's///g'`, 
 even allowing you to specify where the cursor should be placed after inserting the snippet.
 
+You can even look up documentation and help of your commands on the fly.
+Simply hover your cursor over the desired command and press `F5`.
+You can then choose between different documentation-options to look at.
+You can add your own options (for example [tldr](https://tldr.sh/)) in the config file
+in the `[help_viewers]` section.
+
 # Showcase
 ![showcase](showcase.gif)
 
@@ -38,6 +44,9 @@ In the textfield, use Alt+Enter to insert a newline.
 These will be removed when evaluating, so you don't need to add any `\`es to the end of your lines.
 
 Pipr will store it's history and bookmarks as well as a configuration file in `~/.config/pipr`.
+
+You can look at the default configuration by using `pipr --config-reference`.
+This will contain all available options, with some documentation added.
 
 ## Dependencies
 Currently, Pipr uses [bubblewrap](https://github.com/containers/bubblewrap)
