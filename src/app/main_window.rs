@@ -1,22 +1,31 @@
 use super::app::*;
 use super::lineeditor::*;
+use super::KeySelectMenu;
 use crossterm::event::{KeyCode, KeyModifiers};
 
 impl App {
-    pub fn handle_snippet_mode_event(&mut self, code: KeyCode) {
-        if let KeyCode::Char(c) = code {
-            // TODO check for pipes and use without_pipe, also normalize spacing
-            if let Some(snippet) = self.config.snippets.get(&c) {
-                self.input_state.insert_at_cursor(&snippet.text);
-                self.input_state.cursor_col += snippet.cursor_offset;
+    pub fn handle_key_select_menu_event(&mut self, key_select_menu: KeySelectMenu<KeySelectMenuType>, c: char) {
+        match key_select_menu.menu_type {
+            KeySelectMenuType::Snippets => {
+                if let Some(snippet) = self.config.snippets.get(&c) {
+                    self.input_state.insert_at_cursor(&snippet.text);
+                    self.input_state.cursor_col += snippet.cursor_offset;
+                }
             }
+            KeySelectMenuType::OpenWordIn(word) => match c {
+                'm' => self.should_open_help_command = Some(HelpCommandRequest::Manpage(word.into())),
+                'h' => self.should_open_help_command = Some(HelpCommandRequest::Help(word.into())),
+                _ => {}
+            },
         }
-        self.snippet_mode = false;
     }
+
     pub fn handle_main_window_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         let control_pressed = modifiers.contains(KeyModifiers::CONTROL);
-        if self.snippet_mode {
-            self.handle_snippet_mode_event(code);
+        if let Some(key_select_menu) = self.opened_key_select_menu.take() {
+            if let KeyCode::Char(c) = code {
+                self.handle_key_select_menu_event(key_select_menu, c);
+            }
             return;
         }
 
@@ -28,7 +37,12 @@ impl App {
 
             KeyCode::F(5) => {
                 let hovered_word = word_under_cursor(self.input_state.current_line(), self.input_state.cursor_col);
-                self.opened_manpage = hovered_word.map(|x| x.to_string());
+                if let Some(word) = hovered_word {
+                    self.opened_key_select_menu = Some(KeySelectMenu::new(
+                        vec![('m', "man-page".into()), ('h', "--help".into())],
+                        KeySelectMenuType::OpenWordIn(word.into()),
+                    ));
+                }
             }
 
             KeyCode::Char('s') if control_pressed => self.bookmarks.toggle_entry(self.input_state.content_to_commandentry()),
@@ -39,7 +53,16 @@ impl App {
                 self.input_state.apply_event(EditorEvent::Clear);
             }
 
-            KeyCode::Char('v') if control_pressed => self.snippet_mode = true,
+            KeyCode::Char('v') if control_pressed => {
+                self.opened_key_select_menu = Some(KeySelectMenu::new(
+                    self.config
+                        .snippets
+                        .iter()
+                        .map(|(&c, v)| (c, v.to_string()))
+                        .collect::<Vec<_>>(),
+                    KeySelectMenuType::Snippets,
+                ));
+            }
             KeyCode::Enter => {
                 if !self.input_state.content_str().is_empty() {
                     self.history.push(self.input_state.content_to_commandentry());

@@ -31,6 +31,16 @@ pub enum WindowState {
     HistoryList(CommandListState),
 }
 
+pub enum KeySelectMenuType {
+    Snippets,
+    OpenWordIn(String), // stores the word that should be opened in the selected help
+}
+
+pub enum HelpCommandRequest {
+    Manpage(String),
+    Help(String),
+}
+
 pub struct App {
     pub input_state: EditorState,
     pub command_output: String,
@@ -41,12 +51,12 @@ pub struct App {
     pub window_state: WindowState,
     pub bookmarks: CommandList,
     pub history: CommandList,
-    pub opened_manpage: Option<String>,
+    pub should_open_help_command: Option<HelpCommandRequest>,
     pub history_idx: Option<usize>,
     pub executor: Executor,
     pub config: PiprConfig,
     pub should_quit: bool,
-    pub snippet_mode: bool,
+    pub opened_key_select_menu: Option<KeySelectMenu<KeySelectMenuType>>,
 }
 
 impl App {
@@ -59,10 +69,10 @@ impl App {
             last_executed_cmd: "".into(),
             autoeval_mode: config.autoeval_mode_default,
             paranoid_history_mode: config.paranoid_history_mode_default,
-            opened_manpage: None,
+            should_open_help_command: None,
             should_quit: false,
             history_idx: None,
-            snippet_mode: false,
+            opened_key_select_menu: None,
             executor,
             config,
             bookmarks,
@@ -205,5 +215,22 @@ mod test {
         assert_eq!(word_under_cursor("", 2), None);
         assert_eq!(word_under_cursor("abc", 0), Some("abc"));
         assert_eq!(word_under_cursor("abc", 3), Some("abc"));
+        // TODO fix this
+        //assert_eq!(word_under_cursor("abc     def ghi", 5), None);
+    }
+}
+
+pub struct KeySelectMenu<T> {
+    options: Vec<(char, String)>,
+    pub menu_type: T,
+}
+
+impl<T> KeySelectMenu<T> {
+    pub fn new(options: Vec<(char, String)>, menu_type: T) -> Self {
+        Self { options, menu_type }
+    }
+
+    pub fn option_list_strings(&self) -> impl Iterator<Item = String> + '_ {
+        self.options.iter().map(|(c, s)| format!("{}: {}", c, s))
     }
 }

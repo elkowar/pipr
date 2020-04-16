@@ -1,12 +1,10 @@
 use crate::app::command_list_window::CommandListState;
 use crate::app::*;
-use crate::snippets::Snippet;
 use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
 };
 use std::{
-    collections::HashMap,
     io::{self, Stdout, Write},
     process::Command,
 };
@@ -16,14 +14,36 @@ use tui::widgets::{Block, Borders, List, ListState, Paragraph, Text};
 use tui::{backend::Backend, backend::CrosstermBackend, Frame, Terminal};
 use Constraint::*;
 
-pub fn draw_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> Result<(), failure::Error> {
-    if let Some(manpage) = &app.opened_manpage {
-        execute!(io::stdout(), LeaveAlternateScreen)?;
-        Command::new("man").arg(manpage).spawn()?.wait()?;
-        app.opened_manpage = None;
-        execute!(io::stdout(), EnterAlternateScreen)?;
-        terminal.resize(terminal.size()?)?;
+// TODO put this somewhere else, this _really_ doesn't belong here
+fn execute_help_command(
+    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    request: &HelpCommandRequest,
+) -> Result<Option<String>, failure::Error> {
+    match request {
+        HelpCommandRequest::Manpage(word) => {
+            execute!(io::stdout(), LeaveAlternateScreen)?;
+            Command::new("man").arg(word).spawn()?.wait()?;
+            execute!(io::stdout(), EnterAlternateScreen)?;
+            terminal.resize(terminal.size()?)?; // this will redraw the whole screen
+            Ok(None)
+        }
+        HelpCommandRequest::Help(word) => {
+            let output = Command::new(word).arg("--help").output();
+            match output {
+                Ok(output) => Ok(Some(std::str::from_utf8(&output.stdout)?.to_owned())),
+                Err(_) => Ok(None),
+            }
+        }
     }
+}
+
+pub fn draw_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> Result<(), failure::Error> {
+    let should_open_help_command = app.should_open_help_command.take();
+    let help_output = if let Some(request) = should_open_help_command {
+        execute_help_command(terminal, &request)?
+    } else {
+        None
+    };
 
     let mut input_field_rect = tui::layout::Rect::new(0, 0, 0, 0);
     terminal.draw(|mut f| {
@@ -33,7 +53,13 @@ pub fn draw_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App
             WindowState::Main => {
                 let root_chunks = Layout::default()
                     .direction(Direction::Horizontal)
-                    .constraints([Percentage(if app.snippet_mode { 40 } else { 0 }), Percentage(100)].as_ref())
+                    .constraints(
+                        [
+                            Percentage(if app.opened_key_select_menu.is_some() { 40 } else { 0 }),
+                            Percentage(100),
+                        ]
+                        .as_ref(),
+                    )
                     .split(root_rect);
 
                 let exec_chunks = Layout::default()
@@ -41,19 +67,31 @@ pub fn draw_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App
                     .constraints([Length(2 + app.input_state.content_lines().len() as u16), Percentage(100)].as_ref())
                     .split(root_chunks[1]);
 
-                if app.snippet_mode {
-                    draw_snippet_list(&mut f, root_chunks[0], &app.config.snippets);
+                if let Some(opened_key_select_menu) = &app.opened_key_select_menu {
+                    let options = opened_key_select_menu.option_list_strings();
+                    f.render_widget(
+                        List::new(options.map(Text::raw)).block(make_default_block("Snippets", false)),
+                        root_chunks[0],
+                    );
                 }
 
                 input_field_rect = exec_chunks[0];
                 draw_input_field(&mut f, input_field_rect, &app);
-                draw_outputs(
-                    &mut f,
-                    exec_chunks[1],
-                    &app.input_state.content_str() == &app.last_executed_cmd,
-                    &app.command_output,
-                    &app.command_error,
-                );
+
+                if let Some(help_output) = help_output {
+                    f.render_widget(
+                        Paragraph::new([Text::raw(help_output)].iter()).block(make_default_block("Help", false)),
+                        exec_chunks[1],
+                    );
+                } else {
+                    draw_outputs(
+                        &mut f,
+                        exec_chunks[1],
+                        &app.input_state.content_str() == &app.last_executed_cmd,
+                        &app.command_output,
+                        &app.command_error,
+                    );
+                }
             }
             WindowState::TextView(title, text) => {
                 f.render_widget(
@@ -146,14 +184,6 @@ fn draw_input_field<B: Backend>(f: &mut Frame<B>, rect: Rect, app: &App) {
 
     f.render_widget(
         List::new(lines.map(Text::raw)).block(make_default_block(&input_block_title, true)),
-        rect,
-    );
-}
-
-fn draw_snippet_list<B: Backend>(f: &mut Frame<B>, rect: Rect, snippets: &HashMap<char, Snippet>) {
-    let snippet_list = snippets.iter().map(|(c, snippet)| format!("{}: {}", c, snippet));
-    f.render_widget(
-        List::new(snippet_list.map(Text::raw)).block(make_default_block("Snippets", false)),
         rect,
     );
 }
