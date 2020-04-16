@@ -1,7 +1,8 @@
 use super::app::*;
 use super::lineeditor::*;
-use super::KeySelectMenu;
+use super::{key_select_menu::KeySelectMenu, Command};
 use crossterm::event::{KeyCode, KeyModifiers};
+use std::str;
 
 impl App {
     pub fn handle_key_select_menu_event(&mut self, key_select_menu: KeySelectMenu<KeySelectMenuType>, c: char) {
@@ -13,8 +14,18 @@ impl App {
                 }
             }
             KeySelectMenuType::OpenWordIn(word) => match c {
-                'm' => self.should_open_help_command = Some(HelpCommandRequest::Manpage(word.into())),
-                'h' => self.should_open_help_command = Some(HelpCommandRequest::Help(word.into())),
+                'm' => {
+                    self.should_jump_to_other_cmd = Some(vec!["man".into(), word.into()]);
+                }
+                'h' => match Command::new(&word).arg("--help").output() {
+                    Ok(output) => {
+                        let stdout = str::from_utf8(&output.stdout)
+                            .expect("could not encode help output as utf8")
+                            .to_string();
+                        self.help_output = Some(stdout)
+                    }
+                    Err(_) => self.help_output = Some(format!("couldn't open help for `{}`, sorry", &word)),
+                },
                 _ => {}
             },
         }

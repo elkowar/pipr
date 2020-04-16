@@ -14,36 +14,22 @@ use tui::widgets::{Block, Borders, List, ListState, Paragraph, Text};
 use tui::{backend::Backend, backend::CrosstermBackend, Frame, Terminal};
 use Constraint::*;
 
-// TODO put this somewhere else, this _really_ doesn't belong here
-fn execute_help_command(
-    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
-    request: &HelpCommandRequest,
-) -> Result<Option<String>, failure::Error> {
-    match request {
-        HelpCommandRequest::Manpage(word) => {
-            execute!(io::stdout(), LeaveAlternateScreen)?;
-            Command::new("man").arg(word).spawn()?.wait()?;
-            execute!(io::stdout(), EnterAlternateScreen)?;
-            terminal.resize(terminal.size()?)?; // this will redraw the whole screen
-            Ok(None)
-        }
-        HelpCommandRequest::Help(word) => {
-            let output = Command::new(word).arg("--help").output();
-            match output {
-                Ok(output) => Ok(Some(std::str::from_utf8(&output.stdout)?.to_owned())),
-                Err(_) => Ok(None),
-            }
-        }
-    }
-}
-
 pub fn draw_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> Result<(), failure::Error> {
-    let should_open_help_command = app.should_open_help_command.take();
-    let help_output = if let Some(request) = should_open_help_command {
-        execute_help_command(terminal, &request)?
-    } else {
-        None
-    };
+    if let Some(should_jump_to_other_cmd) = app.should_jump_to_other_cmd.take() {
+        execute!(io::stdout(), LeaveAlternateScreen)?;
+        let mut command_args = should_jump_to_other_cmd.iter();
+        let mut command = Command::new(
+            command_args
+                .next()
+                .expect("should_jump_to_other_cmd had an empty command. Please report this, this should be impossible"),
+        );
+        for arg in command_args {
+            command.arg(arg);
+        }
+        command.spawn()?.wait()?;
+        execute!(io::stdout(), EnterAlternateScreen)?;
+        terminal.resize(terminal.size()?)?; // this will redraw the whole screen
+    }
 
     let mut input_field_rect = tui::layout::Rect::new(0, 0, 0, 0);
     terminal.draw(|mut f| {
@@ -78,7 +64,7 @@ pub fn draw_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App
                 input_field_rect = exec_chunks[0];
                 draw_input_field(&mut f, input_field_rect, &app);
 
-                if let Some(help_output) = help_output {
+                if let Some(help_output) = &app.help_output {
                     f.render_widget(
                         Paragraph::new([Text::raw(help_output)].iter()).block(make_default_block("Help", false)),
                         exec_chunks[1],

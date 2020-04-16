@@ -1,5 +1,5 @@
 use super::lineeditor::*;
-use super::{command_list_window::CommandListState, pipr_config::*};
+use super::{command_list_window::CommandListState, key_select_menu::KeySelectMenu, pipr_config::*};
 use crate::command_evaluation::*;
 use crate::commandlist::CommandList;
 use crossterm::event::{KeyCode, KeyModifiers};
@@ -36,27 +36,23 @@ pub enum KeySelectMenuType {
     OpenWordIn(String), // stores the word that should be opened in the selected help
 }
 
-pub enum HelpCommandRequest {
-    Manpage(String),
-    Help(String),
-}
-
 pub struct App {
     pub input_state: EditorState,
     pub command_output: String,
     pub command_error: String,
+    pub help_output: Option<String>,
     pub autoeval_mode: bool,
     pub last_executed_cmd: String,
     pub paranoid_history_mode: bool,
     pub window_state: WindowState,
     pub bookmarks: CommandList,
     pub history: CommandList,
-    pub should_open_help_command: Option<HelpCommandRequest>,
     pub history_idx: Option<usize>,
     pub executor: Executor,
     pub config: PiprConfig,
     pub should_quit: bool,
     pub opened_key_select_menu: Option<KeySelectMenu<KeySelectMenuType>>,
+    pub should_jump_to_other_cmd: Option<Vec<String>>, // describes the command + args starting the program
 }
 
 impl App {
@@ -66,13 +62,14 @@ impl App {
             input_state: EditorState::new(),
             command_output: "".into(),
             command_error: "".into(),
+            help_output: None,
             last_executed_cmd: "".into(),
             autoeval_mode: config.autoeval_mode_default,
             paranoid_history_mode: config.paranoid_history_mode_default,
-            should_open_help_command: None,
             should_quit: false,
             history_idx: None,
             opened_key_select_menu: None,
+            should_jump_to_other_cmd: None,
             executor,
             config,
             bookmarks,
@@ -81,6 +78,7 @@ impl App {
     }
 
     pub fn on_cmd_output(&mut self, process_result: ProcessResult) {
+        self.help_output = None;
         match process_result {
             ProcessResult::Ok(stdout) => {
                 if self.paranoid_history_mode {
@@ -191,6 +189,9 @@ pub fn word_under_cursor(line: &str, cursor_col: usize) -> Option<&str> {
     if words.len() == 1 {
         hovered_word = Some(line);
     }
+    if cursor_col == line.len() {
+        hovered_word = words.last().cloned();
+    }
     for idx in 0..words.len() {
         let len = words.clone().into_iter().take(idx + 1).collect::<Vec<&str>>().join(" ").len();
         if len > cursor_col {
@@ -216,21 +217,6 @@ mod test {
         assert_eq!(word_under_cursor("abc", 0), Some("abc"));
         assert_eq!(word_under_cursor("abc", 3), Some("abc"));
         // TODO fix this
-        //assert_eq!(word_under_cursor("abc     def ghi", 5), None);
-    }
-}
-
-pub struct KeySelectMenu<T> {
-    options: Vec<(char, String)>,
-    pub menu_type: T,
-}
-
-impl<T> KeySelectMenu<T> {
-    pub fn new(options: Vec<(char, String)>, menu_type: T) -> Self {
-        Self { options, menu_type }
-    }
-
-    pub fn option_list_strings(&self) -> impl Iterator<Item = String> + '_ {
-        self.options.iter().map(|(c, s)| format!("{}: {}", c, s))
+        //assert_eq!(word_under_cursor("abc     def ghi", 5), Some("abc"));
     }
 }

@@ -58,9 +58,15 @@ impl Executor {
                         // if yes, send out it's output
                         let command_output = handle.wait_with_output().unwrap();
                         let result = if status.success() {
-                            ProcessResult::Ok(str::from_utf8(&command_output.stdout).unwrap().to_owned())
+                            let stdout = str::from_utf8(&command_output.stdout)
+                                .expect("couldn't encode stdout as utf8, there might be some strange characters in there...")
+                                .to_owned();
+                            ProcessResult::Ok(stdout)
                         } else {
-                            ProcessResult::NotOk(str::from_utf8(&command_output.stderr).unwrap().to_owned())
+                            let stderr = str::from_utf8(&command_output.stderr)
+                                .expect("couldn't encode stderr as utf8, there might be some strange characters in there...")
+                                .to_owned();
+                            ProcessResult::NotOk(stderr)
                         };
 
                         cmd_out_send.send(result).unwrap();
