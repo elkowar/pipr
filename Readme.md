@@ -48,6 +48,18 @@ Pipr will store it's history and bookmarks as well as a configuration file in `~
 You can look at the default configuration by using `pipr --config-reference`.
 This will contain all available options, with some documentation added.
 
+### Terminal integration
+In the `shell_integration/` folder in this repository you'll find some scripts for different interactive shells.
+These allow you to call pipr from the terminal with a simple keypress, 
+inserting your current line-buffer into pipr.
+If you're using fish, it will even put the final command back into your terminal's linebuffer after closing pipr.
+
+To use these, simply put the lines from the respective file into your `.bashrc` or `config.fish` file.
+
+__Keymappings__  
+*Fish:* Ctrl+Alt+a  
+*Bash:* Alt+a
+
 ## Dependencies
 Currently, Pipr uses [bubblewrap](https://github.com/containers/bubblewrap)
 to execute your command in an isolated environment, 
