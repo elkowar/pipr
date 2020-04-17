@@ -39,6 +39,7 @@ fn main() -> Result<(), failure::Error> {
     let mut opts = Options::new();
     opts.optopt("d", "default", "text inserted into the textfield on startup", "TEXT");
     opts.optopt("o", "out-file", "write final command to file", "FILE");
+    opts.optopt("a", "append-file", "append final command to file", "FILE");
     opts.optflag(
         "",
         "no-isolation",
@@ -58,6 +59,7 @@ fn main() -> Result<(), failure::Error> {
     let flag_config_reference = matches.opt_present("config-reference");
     let opt_default_input = matches.opt_str("default");
     let opt_out_file = matches.opt_str("out-file");
+    let opt_append_file = matches.opt_str("append-file");
 
     if flag_help {
         let brief = format!("Usage: {} [options]", program);
@@ -106,7 +108,7 @@ fn main() -> Result<(), failure::Error> {
 
     run_app(&mut app)?;
 
-    after_finish(&app, opt_out_file)?;
+    after_finish(&app, opt_out_file, opt_append_file)?;
 
     Ok(())
 }
@@ -114,7 +116,7 @@ fn main() -> Result<(), failure::Error> {
 /// executed after the program has been closed.
 /// optionally given out_file, a path to a file that the
 /// final command will be written to (mostly for scripting stuff)
-fn after_finish(app: &App, out_file: Option<String>) -> Result<(), failure::Error> {
+fn after_finish(app: &App, out_file: Option<String>, append_file: Option<String>) -> Result<(), failure::Error> {
     if let Some(finish_hook) = &app.config.finish_hook {
         let finish_hook = finish_hook.split(" ").collect::<Vec<&str>>();
         if let Some(cmd) = finish_hook.first() {
@@ -133,6 +135,14 @@ fn after_finish(app: &App, out_file: Option<String>) -> Result<(), failure::Erro
     if let Some(out_file) = out_file {
         File::create(out_file)?.write_all(app.input_state.content_str().as_bytes())?;
     }
+    if let Some(append_file) = append_file {
+        std::fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(append_file)?
+            .write_all(app.input_state.content_str().as_bytes())?;
+    }
+
     Ok(())
 }
 
