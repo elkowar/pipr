@@ -4,6 +4,7 @@ extern crate getopts;
 use getopts::Options;
 use itertools::Itertools;
 use std::env;
+use std::fs::File;
 use std::io;
 use std::io::Write;
 use std::path::Path;
@@ -37,6 +38,7 @@ fn main() -> Result<(), failure::Error> {
     let program = args[0].clone();
     let mut opts = Options::new();
     opts.optopt("d", "default", "text inserted into the textfield on startup", "TEXT");
+    opts.optopt("o", "out-file", "write final command to file", "FILE");
     opts.optflag(
         "",
         "no-isolation",
@@ -52,9 +54,10 @@ fn main() -> Result<(), failure::Error> {
     let matches = opts.parse(&args[1..]).unwrap();
 
     let flag_help = matches.opt_present("help");
-    let opt_default_input = matches.opt_str("default");
     let flag_no_isolation = matches.opt_present("no-isolation");
     let flag_config_reference = matches.opt_present("config-reference");
+    let opt_default_input = matches.opt_str("default");
+    let opt_out_file = matches.opt_str("out-file");
 
     if flag_help {
         let brief = format!("Usage: {} [options]", program);
@@ -103,12 +106,15 @@ fn main() -> Result<(), failure::Error> {
 
     run_app(&mut app)?;
 
-    after_finish(&app)?;
+    after_finish(&app, opt_out_file)?;
 
     Ok(())
 }
 
-fn after_finish(app: &App) -> Result<(), failure::Error> {
+/// executed after the program has been closed.
+/// optionally given out_file, a path to a file that the
+/// final command will be written to (mostly for scripting stuff)
+fn after_finish(app: &App, out_file: Option<String>) -> Result<(), failure::Error> {
     if let Some(finish_hook) = &app.config.finish_hook {
         let finish_hook = finish_hook.split(" ").collect::<Vec<&str>>();
         if let Some(cmd) = finish_hook.first() {
@@ -124,6 +130,9 @@ fn after_finish(app: &App) -> Result<(), failure::Error> {
     }
 
     println!("{}", app.input_state.content_str());
+    if let Some(out_file) = out_file {
+        File::create(out_file)?.write_all(app.input_state.content_str().as_bytes())?;
+    }
     Ok(())
 }
 
