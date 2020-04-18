@@ -122,8 +122,9 @@ fn run_cmd_isolated(
     eval_environment: &Vec<String>,
     cmd: &str,
 ) -> Child {
-    let args = "--ro-bind ./ /working_directory --chdir /working_directory \
-                --tmpfs /tmp --proc /proc --dev /dev --die-with-parent --share-net --unshare-pid";
+    let args = "--ro-bind / / --die-with-parent --share-net --unshare-pid --tmpfs /tmp --dev /dev --proc /proc";
+    //let args = "--ro-bind ./ /working_directory --chdir /working_directory \
+    //--tmpfs /tmp --proc /proc --dev /dev --die-with-parent --share-net --unshare-pid";
     let mut command = Command::new("bwrap");
     for arg in args.split(" ") {
         command.arg(arg);

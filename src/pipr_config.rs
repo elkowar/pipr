@@ -30,18 +30,8 @@ cmdlist_always_show_preview = false
 
 eval_environment = [\"bash\", \"-c\"]
 
-# directories mounted into the isolated environment.
-# Syntax: '<on_host>:<in_isolated>'
-isolation_mounts_readonly = ['/lib:/lib', '/usr:/usr', '/lib64:/lib64', '/bin:/bin', '/etc:/etc']
-
-# Add paths info the isolated environments $PATH.
-# for example, you might mount your '~/.local/bin' to '/local_bin', 
-# and then add '/local_bin' to the isolation_path_additions.
-isolation_path_additions = []
-
 # Snippets can be used to quickly insert common bits of shell
 # use || (two pipes) where you want your cursor to be after insertion
-
 [snippets]
 s = \" | sed -r 's/||//g'\"
 
@@ -49,6 +39,15 @@ s = \" | sed -r 's/||//g'\"
 'm' = \"man ??\"
 'h' = \"?? --help | less\"
 ";
+
+//# directories mounted into the isolated environment.
+//# Syntax: '<on_host>:<in_isolated>'
+//isolation_mounts_readonly = ['/lib:/lib', '/usr:/usr', '/lib64:/lib64', '/bin:/bin', '/etc:/etc']
+
+//# Add paths info the isolated environments $PATH.
+//# for example, you might mount your '~/.local/bin' to '/local_bin',
+//# and then add '/local_bin' to the isolation_path_additions.
+// isolation_path_additions = []
 
 #[derive(Debug, Clone)]
 pub struct PiprConfig {

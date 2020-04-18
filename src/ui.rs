@@ -4,12 +4,11 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
 };
-use io::Stderr;
-use std::io::{self, Stdout, Write};
+use std::io::{self, Write};
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
 use tui::widgets::{Block, Borders, List, ListState, Paragraph, Text};
-use tui::{backend::Backend, backend::CrosstermBackend, Frame, Terminal};
+use tui::{backend::Backend, Frame, Terminal};
 use Constraint::*;
 
 pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(), failure::Error> {
