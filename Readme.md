@@ -29,8 +29,28 @@ You can then choose between different documentation-options to look at.
 You can add your own options (for example [tldr](https://tldr.sh/)) in the config file
 in the `[help_viewers]` section.
 
-# Showcase
+## Showcase
 ![showcase](showcase.gif)
+
+## Installing
+
+### Using the static binary
+If none of the listed installation-options are available to you, 
+you can simply use the static binary provided on the 
+[releases page](https://gitlab.com/Elkowar/pipr/-/releases).
+This _should_ work on most unix-based systems.
+
+### Arch Linux: Using the AUR
+Pipr is available on the AUR, so you can simply install it using your favourite AUR-helper:
+```sh
+$ yay -S pipr-git
+```
+
+### Using Cargo
+If you have a Rust-setup and have `cargo` installed, you can install pipr using cargo:
+```sh
+$ cargo install pipr
+```
 
 
 ## Usage
@@ -48,7 +68,7 @@ Pipr will store it's history and bookmarks as well as a configuration file in `~
 You can look at the default configuration by using `pipr --config-reference`.
 This will contain all available options, with some documentation added.
 
-### Terminal integration
+## Terminal integration
 In the `shell_integration/` folder in this repository you'll find some scripts for different interactive shells.
 These allow you to call pipr from the terminal with a simple keypress, 
 inserting your current line-buffer into pipr.
@@ -61,27 +81,11 @@ __Keymappings__
 *Bash:* Alt+a
 
 ## Dependencies
-Currently, Pipr uses [bubblewrap](https://github.com/containers/bubblewrap)
+Pipr uses [bubblewrap](https://github.com/containers/bubblewrap)
 to execute your command in an isolated environment, 
 preventing most (but maybe not all, I won't give you any guarantees) dangers 
 like accidentally deleting something while you're typing a command.
 
-This means that you'll need to have bubblewarp somewhere on your `PATH`,
+This means that you'll need to have bubblewrap somewhere on your `PATH`,
 or you'll have to use the unsafe-mode by passing the `no-isolation` flag.
 
-## Troubleshooting
-
-If there are problems executing any command, 
-your isolated environment might be missing some necessary folders.
-You can adjust which directories are mounted into the isolated environment 
-in the `pipr.toml` config-file in `~/.config/pipr`.
-
-To make sure this is the problem, try running unsafe-mode (by passing `--no-isolation`).
-In this mode, your commands get executed directly without a layer of isolation, 
-so be cautious to not do `rm ./` or something. This _could_ delete your stuff.
-
-## Installing
-If you have a Rust setup and have cargo installed, you can install pipr using cargo:
-```sh
-$ cargo install pipr
-```
