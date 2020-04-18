@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate maplit;
 extern crate getopts;
+use atty::Stream;
 use getopts::Options;
 use itertools::Itertools;
 use std::env;
@@ -32,50 +33,21 @@ pub use commandlist::CommandList;
 pub use lineeditor as le;
 pub use pipr_config::*;
 
+pub struct CliArgs {
+    default_content: Option<String>,
+    output_file: Option<String>,
+    unsafe_mode: bool,
+}
+
 fn main() -> Result<(), failure::Error> {
-    // arguments
-    let args: Vec<String> = env::args().collect();
-    let program = args[0].clone();
-    let mut opts = Options::new();
-    opts.optopt("d", "default", "text inserted into the textfield on startup", "TEXT");
-    opts.optopt("o", "out-file", "write final command to file", "FILE");
-    opts.optflag(
-        "",
-        "no-isolation",
-        "disable isolation. This will run the commands directly on your system, without protection. Take care.",
-    );
-    opts.optflag("h", "help", "print this help menu");
-    opts.optflag(
-        "",
-        "config-reference",
-        "print out the default configuration file, with comments",
-    );
-
-    let matches = opts.parse(&args[1..]).unwrap();
-
-    let flag_help = matches.opt_present("help");
-    let flag_no_isolation = matches.opt_present("no-isolation");
-    let flag_config_reference = matches.opt_present("config-reference");
-    let opt_default_input = matches.opt_str("default");
-    let opt_out_file = matches.opt_str("out-file");
-
-    if flag_help {
-        let brief = format!("Usage: {} [options]", program);
-        print!("{}", opts.usage(&brief));
-        std::process::exit(0);
-    } else if flag_config_reference {
-        println!("{}", pipr_config::DEFAULT_CONFIG);
-        std::process::exit(0);
-    }
-
-    // initialize
+    let args = handle_cli_arguments();
 
     pub const CONFIG_DIR_RELATIVE_TO_HOME: &'static str = ".config/pipr/";
     let config_path = Path::new(&env::var("HOME").unwrap()).join(CONFIG_DIR_RELATIVE_TO_HOME);
 
     let config = PiprConfig::load_from_file(&config_path.join("pipr.toml"));
 
-    let execution_mode = if flag_no_isolation {
+    let execution_mode = if args.unsafe_mode {
         ExecutionMode::UNSAFE
     } else {
         ExecutionMode::ISOLATED {
@@ -100,15 +72,56 @@ fn main() -> Result<(), failure::Error> {
 
     let mut app = App::new(executor, config.clone(), bookmarks, history);
 
-    if let Some(default_value) = opt_default_input {
+    if let Some(default_value) = args.default_content {
         app.input_state.set_content(default_value.lines().map_into().collect());
     }
 
-    run_app(&mut app)?;
+    // render on stdout if output is not piped into something. if it is, use stderr.
+    if atty::is(Stream::Stdout) {
+        run_app(&mut app, io::stdout())?;
+    } else {
+        run_app(&mut app, io::stderr())?;
+    }
 
-    after_finish(&app, opt_out_file)?;
+    after_finish(&app, args.output_file)?;
 
     Ok(())
+}
+
+/// parses the arguments, handles printing help and config-reference if requested
+/// and otherwise returns an CliArgs instance.
+fn handle_cli_arguments() -> CliArgs {
+    let cli_args: Vec<String> = env::args().collect();
+    let program = cli_args[0].clone();
+
+    // arguments
+    let mut opts = Options::new();
+    opts.optopt("d", "default", "text inserted into the textfield on startup", "TEXT");
+    opts.optopt("o", "out-file", "write final command to file", "FILE");
+    opts.optflag("", "config-reference", "print out the default configuration file");
+    opts.optflag(
+        "",
+        "no-isolation",
+        "disable isolation. This will run the commands directly on your system, without protection. Take care.",
+    );
+    opts.optflag("h", "help", "print this help menu");
+
+    let matches = opts.parse(&cli_args[1..]).unwrap();
+
+    if matches.opt_present("help") {
+        let brief = format!("Usage: {} [options]", program);
+        print!("{}", opts.usage(&brief));
+        std::process::exit(0);
+    } else if matches.opt_present("config-reference") {
+        println!("{}", pipr_config::DEFAULT_CONFIG);
+        std::process::exit(0);
+    }
+
+    CliArgs {
+        default_content: matches.opt_str("default"),
+        output_file: matches.opt_str("out-file"),
+        unsafe_mode: matches.opt_present("no-isolation"),
+    }
 }
 
 /// executed after the program has been closed.
@@ -136,12 +149,10 @@ fn after_finish(app: &App, out_file: Option<String>) -> Result<(), failure::Erro
     Ok(())
 }
 
-fn run_app(mut app: &mut App) -> Result<(), failure::Error> {
-    let mut stdout = io::stdout();
-    #[allow(deprecated)]
-    execute!(stdout, EnterAlternateScreen)?;
+fn run_app<W: Write>(mut app: &mut App, mut output_stream: W) -> Result<(), failure::Error> {
+    execute!(output_stream, EnterAlternateScreen)?;
     enable_raw_mode()?;
-    let backend = CrosstermBackend::new(stdout);
+    let backend = CrosstermBackend::new(output_stream);
     let mut terminal = Terminal::new(backend)?;
 
     std::panic::set_hook(Box::new(|data| {
@@ -173,7 +184,6 @@ fn run_app(mut app: &mut App) -> Result<(), failure::Error> {
         }
     }
     disable_raw_mode()?;
-    #[allow(deprecated)]
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     std::io::Write::flush(&mut terminal.backend_mut())?;
 

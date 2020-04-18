@@ -4,6 +4,7 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
 };
+use io::Stderr;
 use std::io::{self, Stdout, Write};
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
@@ -11,7 +12,7 @@ use tui::widgets::{Block, Borders, List, ListState, Paragraph, Text};
 use tui::{backend::Backend, backend::CrosstermBackend, Frame, Terminal};
 use Constraint::*;
 
-pub fn draw_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> Result<(), failure::Error> {
+pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(), failure::Error> {
     if let Some(mut should_jump_to_other_cmd) = app.should_jump_to_other_cmd.take() {
         execute!(io::stdout(), LeaveAlternateScreen)?;
         should_jump_to_other_cmd.spawn()?.wait()?;
