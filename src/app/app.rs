@@ -51,6 +51,7 @@ pub struct App {
     pub config: PiprConfig,
     pub should_quit: bool,
     pub opened_key_select_menu: Option<KeySelectMenu<KeySelectMenuType>>,
+    pub raw_mode: bool,
 
     /// A command that should be executed in the main screen.
     /// this will be taken ( and thus reset ) and handled by the ui module.
@@ -58,7 +59,13 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(executor: CommandExecutionHandler, config: PiprConfig, bookmarks: CommandList, history: CommandList) -> App {
+    pub fn new(
+        execution_handler: CommandExecutionHandler,
+        raw_mode: bool,
+        config: PiprConfig,
+        bookmarks: CommandList,
+        history: CommandList,
+    ) -> App {
         App {
             window_state: WindowState::Main,
             input_state: EditorState::new(),
@@ -71,7 +78,8 @@ impl App {
             history_idx: None,
             opened_key_select_menu: None,
             should_jump_to_other_cmd: None,
-            execution_handler: executor,
+            execution_handler,
+            raw_mode,
             config,
             bookmarks,
             history,
@@ -104,8 +112,12 @@ impl App {
             .iter()
             .filter(|line| !line.starts_with("#"))
             .map(|x| x.to_owned())
-            .collect::<Vec<String>>()
-            .join(" ");
+            .collect::<Vec<String>>();
+        let command = if self.raw_mode {
+            command.join("\n")
+        } else {
+            command.join(" ")
+        };
 
         self.execution_handler.execute(&command);
         self.last_executed_cmd = self.input_state.content_str();

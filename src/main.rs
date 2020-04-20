@@ -30,13 +30,16 @@ pub mod ui;
 pub use app::app::*;
 pub use command_evaluation::*;
 pub use commandlist::CommandList;
+use io::Read;
 pub use lineeditor as le;
 pub use pipr_config::*;
 
 pub struct CliArgs {
     default_content: Option<String>,
     output_file: Option<String>,
+    input_file: Option<String>,
     unsafe_mode: bool,
+    raw_mode: bool,
 }
 
 fn main() -> Result<(), failure::Error> {
@@ -67,10 +70,15 @@ fn main() -> Result<(), failure::Error> {
 
     // create app and set default
 
-    let mut app = App::new(execution_handler, config.clone(), bookmarks, history);
+    let mut app = App::new(execution_handler, args.raw_mode, config.clone(), bookmarks, history);
 
     if let Some(default_value) = args.default_content {
         app.input_state.set_content(default_value.lines().map_into().collect());
+    }
+    if let Some(input_file) = args.input_file {
+        let mut buffer = String::new();
+        File::open(input_file)?.read_to_string(&mut buffer)?;
+        app.input_state.set_content(buffer.lines().map_into().collect());
     }
 
     // render on stdout if output is not piped into something. if it is, use stderr.
@@ -95,7 +103,9 @@ fn handle_cli_arguments() -> CliArgs {
     let mut opts = Options::new();
     opts.optopt("d", "default", "text inserted into the textfield on startup", "TEXT");
     opts.optopt("o", "out-file", "write final command to file", "FILE");
+    opts.optopt("", "in-file", "read initial command from file", "FILE");
     opts.optflag("", "config-reference", "print out the default configuration file");
+    opts.optflag("r", "raw-mode", "keep linebreaks in finished command when closing");
     opts.optflag(
         "",
         "no-isolation",
@@ -117,7 +127,9 @@ fn handle_cli_arguments() -> CliArgs {
     CliArgs {
         default_content: matches.opt_str("default"),
         output_file: matches.opt_str("out-file"),
+        input_file: matches.opt_str("in-file"),
         unsafe_mode: matches.opt_present("no-isolation"),
+        raw_mode: matches.opt_present("raw-mode"),
     }
 }
 
@@ -125,23 +137,25 @@ fn handle_cli_arguments() -> CliArgs {
 /// optionally given out_file, a path to a file that the
 /// final command will be written to (mostly for scripting stuff)
 fn after_finish(app: &App, out_file: Option<String>) -> Result<(), failure::Error> {
+    let finished_command = if app.raw_mode {
+        app.input_state.content_lines().join("\n")
+    } else {
+        app.input_state.content_str()
+    };
+
     if let Some(finish_hook) = &app.config.finish_hook {
-        let finish_hook = finish_hook.split(" ").collect::<Vec<&str>>();
-        if let Some(cmd) = finish_hook.first() {
-            let mut command = Command::new(cmd);
-            for arg in finish_hook.iter().dropping(1) {
-                command.arg(arg);
-            }
-            let mut child = command.stdin(Stdio::piped()).spawn()?;
+        let mut finish_hook = finish_hook.split(" ");
+        if let Some(cmd) = finish_hook.next() {
+            let mut child = Command::new(cmd).args(finish_hook).stdin(Stdio::piped()).spawn()?;
             let stdin = child.stdin.as_mut().unwrap();
-            stdin.write_all(&app.input_state.content_str().as_bytes())?;
+            stdin.write_all(&finished_command.as_bytes())?;
             child.wait()?;
         }
     }
 
-    println!("{}", app.input_state.content_str());
+    println!("{}", finished_command);
     if let Some(out_file) = out_file {
-        File::create(out_file)?.write_all(app.input_state.content_str().as_bytes())?;
+        File::create(out_file)?.write_all(finished_command.as_bytes())?;
     }
     Ok(())
 }
@@ -154,9 +168,10 @@ fn run_app<W: Write>(mut app: &mut App, mut output_stream: W) -> Result<(), fail
 
     std::panic::set_hook(Box::new(|data| {
         disable_raw_mode().unwrap();
-        #[allow(deprecated)]
         execute!(io::stdout(), LeaveAlternateScreen).unwrap();
+        execute!(io::stderr(), LeaveAlternateScreen).unwrap();
         eprintln!("{}", data);
+        std::process::exit(1);
     }));
 
     while !app.should_quit {
