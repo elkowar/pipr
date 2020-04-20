@@ -47,7 +47,7 @@ pub struct App {
     pub bookmarks: CommandList,
     pub history: CommandList,
     pub history_idx: Option<usize>,
-    pub executor: Executor,
+    pub execution_handler: CommandExecutionHandler,
     pub config: PiprConfig,
     pub should_quit: bool,
     pub opened_key_select_menu: Option<KeySelectMenu<KeySelectMenuType>>,
@@ -58,7 +58,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(executor: Executor, config: PiprConfig, bookmarks: CommandList, history: CommandList) -> App {
+    pub fn new(executor: CommandExecutionHandler, config: PiprConfig, bookmarks: CommandList, history: CommandList) -> App {
         App {
             window_state: WindowState::Main,
             input_state: EditorState::new(),
@@ -71,7 +71,7 @@ impl App {
             history_idx: None,
             opened_key_select_menu: None,
             should_jump_to_other_cmd: None,
-            executor,
+            execution_handler: executor,
             config,
             bookmarks,
             history,
@@ -107,7 +107,7 @@ impl App {
             .collect::<Vec<String>>()
             .join(" ");
 
-        self.executor.execute(&command);
+        self.execution_handler.execute(&command);
         self.last_executed_cmd = self.input_state.content_str();
     }
 

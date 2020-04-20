@@ -3,16 +3,13 @@ use std::str;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum ExecutionMode {
     UNSAFE,
-    ISOLATED {
-        additional_mounts: Vec<(String, String)>,
-        additional_path_entries: Vec<String>,
-    },
+    ISOLATED,
 }
 
-pub struct Executor {
+pub struct CommandExecutionHandler {
     pub execution_mode: ExecutionMode,
     pub eval_environment: Vec<String>,
     cmd_out_receive: Receiver<ProcessResult>,
@@ -25,15 +22,15 @@ pub enum ProcessResult {
     NotOk(String),
 }
 
-impl Executor {
-    pub fn start_executor(execution_mode: ExecutionMode, eval_environment: Vec<String>) -> Executor {
+impl CommandExecutionHandler {
+    pub fn start(execution_mode: ExecutionMode, eval_environment: Vec<String>) -> CommandExecutionHandler {
         let (cmd_in_send, cmd_in_receive) = mpsc::channel::<String>();
         let (cmd_out_send, cmd_out_receive) = mpsc::channel::<ProcessResult>();
         let (stop_send, stop_receive) = mpsc::channel::<()>();
 
-        let executor = Executor {
-            execution_mode: execution_mode.clone(),
+        let executor = CommandExecutionHandler {
             eval_environment: eval_environment.clone(),
+            execution_mode,
             cmd_in_send,
             cmd_out_receive,
             stop_send,
@@ -43,8 +40,13 @@ impl Executor {
             let mut latest_process_handle: Option<Child> = None;
 
             loop {
-                if let Ok(command) = cmd_in_receive.try_recv() {
-                    match start_command(&execution_mode, &eval_environment, &command) {
+                if let Ok(cmd) = cmd_in_receive.try_recv() {
+                    let process_handle_result = match execution_mode {
+                        ExecutionMode::UNSAFE => run_cmd_unsafe(&eval_environment, &cmd),
+                        ExecutionMode::ISOLATED => run_cmd_isolated(&eval_environment, &cmd),
+                    };
+
+                    match process_handle_result {
                         Ok(handle) => {
                             // replace the latest_process_handle with the new one, killing any old processes
                             if let Some(mut old_handle) = latest_process_handle.replace(handle) {
@@ -101,76 +103,31 @@ impl Executor {
     }
 }
 
-fn start_command(execution_mode: &ExecutionMode, eval_environment: &Vec<String>, cmd: &str) -> Result<Child, &'static str> {
-    match execution_mode {
-        ExecutionMode::UNSAFE => run_cmd_unsafe(eval_environment, cmd),
-        ExecutionMode::ISOLATED {
-            additional_mounts,
-            additional_path_entries,
-        } => Ok(run_cmd_isolated(
-            additional_mounts,
-            additional_path_entries,
-            eval_environment,
-            cmd,
-        )),
-    }
-}
-
-fn run_cmd_isolated(
-    mounts: &Vec<(String, String)>,
-    additional_path_entries: &Vec<String>,
-    eval_environment: &Vec<String>,
-    cmd: &str,
-) -> Child {
-    let args = "--ro-bind / / --die-with-parent --share-net --unshare-pid --tmpfs /tmp --dev /dev --proc /proc";
-    //let args = "--ro-bind ./ /working_directory --chdir /working_directory \
-    //--tmpfs /tmp --proc /proc --dev /dev --die-with-parent --share-net --unshare-pid";
-    let mut command = Command::new("bwrap");
-    for arg in args.split(" ") {
-        command.arg(arg);
-    }
-    for (on_host, in_isolated) in mounts {
-        command.arg("--ro-bind").arg(&on_host).arg(&in_isolated);
-    }
-
-    if !additional_path_entries.is_empty() {
-        let mut path_variable = std::env::var("PATH").unwrap();
-        for path_entry in additional_path_entries {
-            path_variable.push_str(&format!(":{}", path_entry));
-        }
-        command.env("PATH", path_variable);
-    }
-
-    let mut eval_environment = eval_environment.into_iter();
-
-    command.arg(eval_environment.next().expect("eval_environment was empty"));
-    for arg in eval_environment {
-        command.arg(arg);
-    }
-    command
+fn run_cmd_isolated(eval_environment: &Vec<String>, cmd: &str) -> Result<Child, String> {
+    const BUBBLEWRAP_ARGS: &str =
+        "--ro-bind / / --tmpfs /tmp --dev /dev --proc /proc --die-with-parent --share-net --unshare-pid";
+    Command::new("bwrap")
+        .args(BUBBLEWRAP_ARGS.split(" "))
+        .args(eval_environment.into_iter())
         .arg(cmd)
         .stdout(Stdio::piped())
         .stdin(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("Failed to execute process in bwrap. this might be a bwrap problem,... or not")
+        .map_err(|err| err.to_string())
 }
 
-fn run_cmd_unsafe(eval_environment: &Vec<String>, cmd: &str) -> Result<Child, &'static str> {
+fn run_cmd_unsafe(eval_environment: &Vec<String>, cmd: &str) -> Result<Child, String> {
     if cmd.contains("rm ") || cmd.contains("mv ") || cmd.contains("dd ") {
-        return Err("Will not run this command, it's for your own good. Believe me.");
+        return Err("Will not run this command, it's for your own good. Believe me.".to_string());
     }
     let mut eval_environment = eval_environment.into_iter();
-    let mut command = Command::new(eval_environment.next().expect("eval_environment was empty"));
-    for arg in eval_environment {
-        command.arg(arg);
-    }
-    let child = command
+    Command::new(eval_environment.next().expect("eval_environment is empty"))
+        .args(eval_environment)
         .arg(cmd)
         .stdout(Stdio::piped())
         .stdin(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("failed to execute process");
-    Ok(child)
+        .map_err(|err| err.to_string())
 }

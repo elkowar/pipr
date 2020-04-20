@@ -50,10 +50,7 @@ fn main() -> Result<(), failure::Error> {
     let execution_mode = if args.unsafe_mode {
         ExecutionMode::UNSAFE
     } else {
-        ExecutionMode::ISOLATED {
-            additional_mounts: config.isolation_mounts_readonly.clone(),
-            additional_path_entries: config.isolation_path_additions.clone(),
-        }
+        ExecutionMode::ISOLATED
     };
 
     let bubblewrap_available = which::which("bwrap").is_ok();
@@ -63,14 +60,14 @@ fn main() -> Result<(), failure::Error> {
         std::process::exit(1);
     }
 
-    let executor = Executor::start_executor(execution_mode, config.eval_environment.clone());
+    let execution_handler = CommandExecutionHandler::start(execution_mode, config.eval_environment.clone());
 
     let bookmarks = CommandList::load_from_file(config_path.join("bookmarks"), None);
     let history = CommandList::load_from_file(config_path.join("history"), Some(config.history_size));
 
     // create app and set default
 
-    let mut app = App::new(executor, config.clone(), bookmarks, history);
+    let mut app = App::new(execution_handler, config.clone(), bookmarks, history);
 
     if let Some(default_value) = args.default_content {
         app.input_state.set_content(default_value.lines().map_into().collect());
@@ -166,7 +163,7 @@ fn run_app<W: Write>(mut app: &mut App, mut output_stream: W) -> Result<(), fail
         ui::draw_app(&mut terminal, &mut app)?;
 
         loop {
-            if let Some(cmd_output) = app.executor.poll_output() {
+            if let Some(cmd_output) = app.execution_handler.poll_output() {
                 app.on_cmd_output(cmd_output);
                 break;
             }
