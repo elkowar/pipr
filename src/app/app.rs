@@ -52,6 +52,7 @@ pub struct App {
     pub should_quit: bool,
     pub opened_key_select_menu: Option<KeySelectMenu<KeySelectMenuType>>,
     pub raw_mode: bool,
+    pub autocompletion_list: Option<Vec<String>>,
 
     /// A command that should be executed in the main screen.
     /// this will be taken ( and thus reset ) and handled by the ui module.
@@ -67,6 +68,7 @@ impl App {
         history: CommandList,
     ) -> App {
         App {
+            autocompletion_list: None,
             window_state: WindowState::Main,
             input_state: EditorState::new(),
             command_output: "".into(),

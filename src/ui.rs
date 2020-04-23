@@ -38,7 +38,14 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result
 
                 let exec_chunks = Layout::default()
                     .direction(Direction::Vertical)
-                    .constraints([Length(2 + app.input_state.content_lines().len() as u16), Percentage(100)].as_ref())
+                    .constraints(
+                        [
+                            Length(2 + app.input_state.content_lines().len() as u16),
+                            Length(if app.autocompletion_list.is_some() { 3 } else { 0 }),
+                            Percentage(100),
+                        ]
+                        .as_ref(),
+                    )
                     .split(root_chunks[1]);
 
                 if let Some(opened_key_select_menu) = &app.opened_key_select_menu {
@@ -52,9 +59,17 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result
                 input_field_rect = exec_chunks[0];
                 draw_input_field(&mut f, input_field_rect, &app);
 
+                if let Some(completions) = &app.autocompletion_list {
+                    f.render_widget(
+                        Paragraph::new([Text::raw(completions.join("  "))].iter())
+                            .block(make_default_block("Suggestions", false)),
+                        exec_chunks[1],
+                    );
+                }
+
                 draw_outputs(
                     &mut f,
-                    exec_chunks[1],
+                    exec_chunks[2],
                     &app.input_state.content_str() == &app.last_executed_cmd,
                     &app.command_output,
                     &app.command_error,

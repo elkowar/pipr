@@ -1,7 +1,8 @@
 use super::app::*;
 use super::key_select_menu::KeySelectMenu;
-use super::lineeditor::*;
+use super::{lineeditor::*, Path};
 use crossterm::event::{KeyCode, KeyModifiers};
+use std::path::PathBuf;
 
 impl App {
     pub fn handle_key_select_menu_event(&mut self, key_select_menu: KeySelectMenu<KeySelectMenuType>, c: char) {
@@ -22,6 +23,10 @@ impl App {
 
     pub fn handle_main_window_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         let control_pressed = modifiers.contains(KeyModifiers::CONTROL);
+
+        // hide completion_list on every keypress
+        self.autocompletion_list = None;
+
         if let Some(key_select_menu) = self.opened_key_select_menu.take() {
             if let KeyCode::Char(c) = code {
                 self.handle_key_select_menu_event(key_select_menu, c);
@@ -34,6 +39,24 @@ impl App {
             KeyCode::Char('q') | KeyCode::Char('c') if control_pressed => self.set_should_quit(),
             KeyCode::F(2) => self.autoeval_mode = !self.autoeval_mode,
             KeyCode::F(3) => self.paranoid_history_mode = !self.paranoid_history_mode,
+
+            KeyCode::Tab => {
+                let current_line = self.input_state.current_line().to_string();
+                let hovered_word = word_under_cursor(&current_line, self.input_state.cursor_col);
+
+                if let Some(hovered_word) = hovered_word {
+                    if let Some(completions) = provide_path_autocomplete(hovered_word) {
+                        if completions.len() == 1 {
+                            let completed_value = completions.first().unwrap();
+                            let completed_value = completed_value.trim_start_matches(hovered_word);
+                            self.input_state.insert_at_cursor(completed_value);
+                            self.input_state.cursor_col += completed_value.len();
+                        } else if completions.len() > 1 {
+                            self.autocompletion_list = Some(completions);
+                        }
+                    }
+                }
+            }
 
             KeyCode::F(5) => {
                 let hovered_word = word_under_cursor(self.input_state.current_line(), self.input_state.cursor_col);
@@ -104,5 +127,35 @@ impl App {
                 self.input_state.set_content(vec![String::new()]);
             }
         }
+    }
+}
+
+fn provide_path_autocomplete(word: &str) -> Option<Vec<String>> {
+    let mut path = PathBuf::new();
+    path.push(word);
+
+    let possible_children: Vec<_> = if let Ok(entries) = path.read_dir() {
+        entries.filter_map(|entry| entry.ok()).collect()
+    } else {
+        let started_subfile_name = path.file_name().unwrap().to_string_lossy().to_string();
+        let parent_path = path.parent().unwrap_or(Path::new("./"));
+        if let Ok(parent_entries) = parent_path.read_dir() {
+            parent_entries
+                .filter_map(|entry| entry.ok())
+                .filter(|entry| entry.file_name().to_string_lossy().starts_with(&started_subfile_name))
+                .collect()
+        } else {
+            Vec::default()
+        }
+    };
+
+    let completions = possible_children
+        .iter()
+        .map(|entry| entry.path().display().to_string())
+        .collect::<Vec<_>>();
+    if completions.is_empty() {
+        None
+    } else {
+        Some(completions)
     }
 }
