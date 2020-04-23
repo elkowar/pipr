@@ -107,7 +107,7 @@ impl EditorState {
             return self.cursor_col;
         }
         let mut new_cursor = self.cursor_col + 1;
-        while let None = self.current_line().get(new_cursor..) {
+        while self.current_line().get(new_cursor..) == None {
             new_cursor += 1;
         }
         new_cursor
@@ -118,7 +118,7 @@ impl EditorState {
             return 0;
         }
         let mut new_cursor = self.cursor_col - 1;
-        while let None = self.current_line().get(new_cursor..) {
+        while self.current_line().get(new_cursor..) == None {
             new_cursor -= 1;
         }
         new_cursor

@@ -26,6 +26,7 @@ pub mod lineeditor;
 pub mod pipr_config;
 pub mod snippets;
 pub mod ui;
+pub mod util;
 
 pub use app::app::*;
 pub use command_evaluation::*;
@@ -195,6 +196,7 @@ fn run_app<W: Write>(mut app: &mut App, mut output_stream: W) -> Result<(), fail
             }
         }
     }
+    app.execution_handler.stop();
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     std::io::Write::flush(&mut terminal.backend_mut())?;

@@ -1,5 +1,6 @@
 use super::app::*;
 use super::key_select_menu::KeySelectMenu;
+use super::util::*;
 use super::{lineeditor::*, Path};
 use crossterm::event::{KeyCode, KeyModifiers};
 use std::path::PathBuf;
@@ -97,7 +98,7 @@ impl App {
 
             KeyCode::Tab => {
                 let current_line = self.input_state.current_line().to_string();
-                let hovered_word = word_under_cursor(&current_line, self.input_state.cursor_col);
+                let hovered_word = current_line.word_at_idx(self.input_state.cursor_col);
                 let hovered_char = self.input_state.hovered_char();
                 if hovered_char.is_none() || hovered_char == Some(" ") || hovered_char == Some("") {
                     if let Some(hovered_word) = hovered_word {
@@ -116,7 +117,8 @@ impl App {
             }
 
             KeyCode::F(5) => {
-                let hovered_word = word_under_cursor(self.input_state.current_line(), self.input_state.cursor_col);
+                let current_line = self.input_state.current_line();
+                let hovered_word = current_line.word_at_idx(self.input_state.cursor_col);
                 if let Some(word) = hovered_word {
                     let help_viewers = &self.config.help_viewers;
                     let options = help_viewers.iter().map(|(&k, v)| (k, v.resolve(word))).collect();

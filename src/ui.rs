@@ -5,7 +5,7 @@ use crossterm::{
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
 };
 use std::io::{self, Write};
-use tui::layout::{Constraint, Corner, Direction, Layout, Rect};
+use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
 use tui::widgets::{Block, Borders, List, ListState, Paragraph, Text};
 use tui::{backend::Backend, Frame, Terminal};
@@ -178,11 +178,7 @@ fn draw_input_field<B: Backend>(f: &mut Frame<B>, rect: Rect, app: &App) {
 fn draw_outputs<B: Backend>(f: &mut Frame<B>, rect: Rect, changed: bool, stdout: &str, stderr: &str) {
     let output_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints(if stderr.is_empty() {
-            [Percentage(100)].as_ref()
-        } else {
-            [Percentage(50), Percentage(50)].as_ref()
-        })
+        .constraints([Percentage(if stderr.is_empty() { 100 } else { 50 }), Percentage(100)].as_ref())
         .split(rect);
 
     let stdout_title = format!("Output{}", if changed { "" } else { " [+]" });
