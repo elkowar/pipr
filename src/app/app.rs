@@ -1,5 +1,8 @@
 use super::lineeditor::*;
-use super::{command_list_window::CommandListState, key_select_menu::KeySelectMenu, pipr_config::*, Command};
+use super::{
+    command_list_window::CommandListState, key_select_menu::KeySelectMenu, main_window::AutocompleteState, pipr_config::*,
+    Command,
+};
 use crate::command_evaluation::*;
 use crate::commandlist::CommandList;
 use crossterm::event::{KeyCode, KeyModifiers};
@@ -52,7 +55,7 @@ pub struct App {
     pub should_quit: bool,
     pub opened_key_select_menu: Option<KeySelectMenu<KeySelectMenuType>>,
     pub raw_mode: bool,
-    pub autocompletion_list: Option<Vec<String>>,
+    pub autocomplete_state: Option<AutocompleteState>,
 
     /// A command that should be executed in the main screen.
     /// this will be taken ( and thus reset ) and handled by the ui module.
@@ -68,7 +71,7 @@ impl App {
         history: CommandList,
     ) -> App {
         App {
-            autocompletion_list: None,
+            autocomplete_state: None,
             window_state: WindowState::Main,
             input_state: EditorState::new(),
             command_output: "".into(),

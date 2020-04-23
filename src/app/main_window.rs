@@ -4,6 +4,33 @@ use super::{lineeditor::*, Path};
 use crossterm::event::{KeyCode, KeyModifiers};
 use std::path::PathBuf;
 
+#[derive(Debug)]
+pub struct AutocompleteState {
+    pub original_prompt: String,
+    pub options: Vec<String>,
+    pub current_idx: usize,
+}
+
+impl AutocompleteState {
+    fn from_options(original_prompt: String, options: Vec<String>) -> Option<AutocompleteState> {
+        if options.is_empty() {
+            None
+        } else {
+            Some(AutocompleteState {
+                current_idx: 0,
+                original_prompt,
+                options,
+            })
+        }
+    }
+    fn cycle_selected(&mut self) {
+        self.current_idx = (self.current_idx + 1) % self.options.len();
+    }
+    fn selected(&self) -> &str {
+        &self.options[self.current_idx]
+    }
+}
+
 impl App {
     pub fn handle_key_select_menu_event(&mut self, key_select_menu: KeySelectMenu<KeySelectMenuType>, c: char) {
         match key_select_menu.menu_type {
@@ -24,8 +51,25 @@ impl App {
     pub fn handle_main_window_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         let control_pressed = modifiers.contains(KeyModifiers::CONTROL);
 
-        // hide completion_list on every keypress
-        self.autocompletion_list = None;
+        if let Some(autocomplete_state) = self.autocomplete_state.as_mut() {
+            match code {
+                KeyCode::Tab => {
+                    autocomplete_state.cycle_selected();
+                    return;
+                }
+                KeyCode::Enter => {
+                    let chosen_completion = autocomplete_state.selected();
+                    let completed_value = chosen_completion.trim_start_matches(&autocomplete_state.original_prompt);
+                    self.input_state.insert_at_cursor(completed_value);
+                    self.input_state.cursor_col += completed_value.len();
+                    self.autocomplete_state = None;
+                    return;
+                }
+                _ => {
+                    self.autocomplete_state = None;
+                }
+            }
+        }
 
         if let Some(key_select_menu) = self.opened_key_select_menu.take() {
             if let KeyCode::Char(c) = code {
@@ -52,7 +96,7 @@ impl App {
                             self.input_state.insert_at_cursor(completed_value);
                             self.input_state.cursor_col += completed_value.len();
                         } else if completions.len() > 1 {
-                            self.autocompletion_list = Some(completions);
+                            self.autocomplete_state = AutocompleteState::from_options(hovered_word.to_string(), completions);
                         }
                     }
                 }

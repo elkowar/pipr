@@ -41,7 +41,7 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result
                     .constraints(
                         [
                             Length(2 + app.input_state.content_lines().len() as u16),
-                            Length(if app.autocompletion_list.is_some() { 3 } else { 0 }),
+                            Length(if app.autocomplete_state.is_some() { 3 } else { 0 }),
                             Percentage(100),
                         ]
                         .as_ref(),
@@ -59,10 +59,19 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result
                 input_field_rect = exec_chunks[0];
                 draw_input_field(&mut f, input_field_rect, &app);
 
-                if let Some(completions) = &app.autocompletion_list {
+                if let Some(autocomplete_state) = &app.autocomplete_state {
+                    let entries = autocomplete_state.options.iter().enumerate().map(|(idx, option)| {
+                        Text::styled(
+                            format!(" {} ", option),
+                            if idx == autocomplete_state.current_idx {
+                                Style::default().fg(Color::Black).bg(Color::White)
+                            } else {
+                                Style::default().fg(Color::White).bg(Color::Black)
+                            },
+                        )
+                    });
                     f.render_widget(
-                        Paragraph::new([Text::raw(completions.join("  "))].iter())
-                            .block(make_default_block("Suggestions", false)),
+                        Paragraph::new(entries.collect_vec().iter()).block(make_default_block("Suggestions", false)),
                         exec_chunks[1],
                     );
                 }
