@@ -26,6 +26,13 @@ impl AutocompleteState {
     fn cycle_selected(&mut self) {
         self.current_idx = (self.current_idx + 1) % self.options.len();
     }
+    fn cycle_selected_backwards(&mut self) {
+        if self.current_idx == 0 {
+            self.current_idx = self.options.len() - 1;
+        } else {
+            self.current_idx = self.current_idx - 1;
+        }
+    }
     fn selected(&self) -> &str {
         &self.options[self.current_idx]
     }
@@ -53,8 +60,12 @@ impl App {
 
         if let Some(autocomplete_state) = self.autocomplete_state.as_mut() {
             match code {
-                KeyCode::Tab => {
+                KeyCode::Tab | KeyCode::Down => {
                     autocomplete_state.cycle_selected();
+                    return;
+                }
+                KeyCode::BackTab | KeyCode::Up => {
+                    autocomplete_state.cycle_selected_backwards();
                     return;
                 }
                 KeyCode::Enter => {
@@ -87,16 +98,18 @@ impl App {
             KeyCode::Tab => {
                 let current_line = self.input_state.current_line().to_string();
                 let hovered_word = word_under_cursor(&current_line, self.input_state.cursor_col);
-
-                if let Some(hovered_word) = hovered_word {
-                    if let Some(completions) = provide_path_autocomplete(hovered_word) {
-                        if completions.len() == 1 {
-                            let completed_value = completions.first().unwrap();
-                            let completed_value = completed_value.trim_start_matches(hovered_word);
-                            self.input_state.insert_at_cursor(completed_value);
-                            self.input_state.cursor_col += completed_value.len();
-                        } else if completions.len() > 1 {
-                            self.autocomplete_state = AutocompleteState::from_options(hovered_word.to_string(), completions);
+                let hovered_char = self.input_state.hovered_char();
+                if hovered_char.is_none() || hovered_char == Some(" ") || hovered_char == Some("") {
+                    if let Some(hovered_word) = hovered_word {
+                        if let Some(completions) = provide_path_autocomplete(hovered_word) {
+                            if completions.len() == 1 {
+                                let completed_value = completions.first().unwrap();
+                                let completed_value = completed_value.trim_start_matches(hovered_word);
+                                self.input_state.insert_at_cursor(completed_value);
+                                self.input_state.cursor_col += completed_value.len();
+                            } else if completions.len() > 1 {
+                                self.autocomplete_state = AutocompleteState::from_options(hovered_word.to_string(), completions);
+                            }
                         }
                     }
                 }

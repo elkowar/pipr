@@ -233,7 +233,6 @@ mod test {
         assert_eq!(word_under_cursor("", 2), None);
         assert_eq!(word_under_cursor("abc", 0), Some("abc"));
         assert_eq!(word_under_cursor("abc", 3), Some("abc"));
-        // TODO fix this
-        //assert_eq!(word_under_cursor("abc     def ghi", 5), Some("abc"));
+        assert_eq!(word_under_cursor("abc     def ghi", 5), Some("abc"));
     }
 }

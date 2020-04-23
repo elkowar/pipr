@@ -94,11 +94,15 @@ impl EditorState {
         self.current_line_mut().insert_str(cursor_col, &text);
     }
 
+    pub fn hovered_char(&self) -> Option<&str> {
+        self.current_line().get(self.cursor_col..self.next_char_index())
+    }
+
     fn current_line_mut(&mut self) -> &mut String {
         &mut self.lines[self.cursor_line]
     }
 
-    fn next_char_index(&self) -> usize {
+    pub fn next_char_index(&self) -> usize {
         if self.cursor_col == self.current_line().len() {
             return self.cursor_col;
         }

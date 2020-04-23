@@ -5,7 +5,7 @@ use crossterm::{
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
 };
 use std::io::{self, Write};
-use tui::layout::{Constraint, Direction, Layout, Rect};
+use tui::layout::{Constraint, Corner, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
 use tui::widgets::{Block, Borders, List, ListState, Paragraph, Text};
 use tui::{backend::Backend, Frame, Terminal};
@@ -41,7 +41,11 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result
                     .constraints(
                         [
                             Length(2 + app.input_state.content_lines().len() as u16),
-                            Length(if app.autocomplete_state.is_some() { 3 } else { 0 }),
+                            Length(if let Some(state) = &app.autocomplete_state {
+                                (state.options.len().min(5) + 2) as u16
+                            } else {
+                                0
+                            }),
                             Percentage(100),
                         ]
                         .as_ref(),
@@ -60,22 +64,14 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result
                 draw_input_field(&mut f, input_field_rect, &app);
 
                 if let Some(autocomplete_state) = &app.autocomplete_state {
-                    let entries = autocomplete_state.options.iter().enumerate().map(|(idx, option)| {
-                        Text::styled(
-                            format!(" {} ", option),
-                            if idx == autocomplete_state.current_idx {
-                                Style::default().fg(Color::Black).bg(Color::White)
-                            } else {
-                                Style::default().fg(Color::White).bg(Color::Black)
-                            },
-                        )
-                    });
-                    f.render_widget(
-                        Paragraph::new(entries.collect_vec().iter()).block(make_default_block("Suggestions", false)),
-                        exec_chunks[1],
-                    );
-                }
+                    let mut list_state = ListState::default();
+                    list_state.select(Some(autocomplete_state.current_idx));
 
+                    let list_widget = List::new(autocomplete_state.options.iter().map(Text::raw))
+                        .highlight_style(Style::default().fg(Color::Black).bg(Color::White))
+                        .block(make_default_block("Suggestions", false));
+                    f.render_stateful_widget(list_widget, exec_chunks[1], &mut list_state);
+                }
                 draw_outputs(
                     &mut f,
                     exec_chunks[2],
