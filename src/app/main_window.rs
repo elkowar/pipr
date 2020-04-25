@@ -5,6 +5,11 @@ use super::{lineeditor::*, Path};
 use crossterm::event::{KeyCode, KeyModifiers};
 use std::path::PathBuf;
 
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::{Child, Command};
+use tokio::stream::StreamExt;
+use tokio::sync::mpsc::{self, Receiver, Sender};
+
 #[derive(Debug)]
 pub struct AutocompleteState {
     pub original_prompt: String,
@@ -56,7 +61,7 @@ impl App {
         }
     }
 
-    pub fn handle_main_window_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
+    pub async fn handle_main_window_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         let control_pressed = modifiers.contains(KeyModifiers::CONTROL);
 
         if let Some(autocomplete_state) = self.autocomplete_state.as_mut() {
@@ -145,7 +150,7 @@ impl App {
                 if !self.input_state.content_str().is_empty() {
                     self.history.push(self.input_state.content_to_commandentry());
                 }
-                self.execute_content();
+                self.execute_content().await;
             }
 
             _ => {
@@ -154,7 +159,7 @@ impl App {
                     self.input_state.apply_event(editor_event);
 
                     if self.autoeval_mode && previous_content != self.input_state.content_str() {
-                        self.execute_content();
+                        self.execute_content().await;
                     }
                 }
             }

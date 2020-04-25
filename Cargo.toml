@@ -32,6 +32,5 @@ which = "3.1.1"
 getopts="0.2"
 maplit = "1.0"
 atty = "0.2"
+tokio = { version = "0.2", features = ["full"] }
 
-[profile.release]
-lto = true  # enable link time optimization -> can reduce size

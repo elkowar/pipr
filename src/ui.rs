@@ -11,10 +11,10 @@ use tui::widgets::{Block, Borders, List, ListState, Paragraph, Text};
 use tui::{backend::Backend, Frame, Terminal};
 use Constraint::*;
 
-pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(), failure::Error> {
+pub async fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(), failure::Error> {
     if let Some(mut should_jump_to_other_cmd) = app.should_jump_to_other_cmd.take() {
         execute!(io::stdout(), LeaveAlternateScreen)?;
-        should_jump_to_other_cmd.env("MAN_POSIXLY_CORRECT", "1").spawn()?.wait()?;
+        should_jump_to_other_cmd.env("MAN_POSIXLY_CORRECT", "1").spawn()?.await?;
         execute!(io::stdout(), EnterAlternateScreen)?;
         terminal.resize(terminal.size()?)?; // this will redraw the whole screen
     }

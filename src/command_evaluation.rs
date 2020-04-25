@@ -1,7 +1,10 @@
-use std::process::{Child, Command, Stdio};
+//use std::process::{Child, Command, Stdio};
+use std::process::Stdio;
 use std::str;
-use std::sync::mpsc::{self, Receiver, Sender};
-use std::thread;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::{Child, Command};
+use tokio::stream::StreamExt;
+use tokio::sync::mpsc::{self, Receiver, Sender};
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum ExecutionMode {
@@ -12,21 +15,22 @@ pub enum ExecutionMode {
 pub struct CommandExecutionHandler {
     pub execution_mode: ExecutionMode,
     pub eval_environment: Vec<String>,
-    cmd_out_receive: Receiver<ProcessResult>,
+    cmd_out_receive: Receiver<CmdOutput>,
     cmd_in_send: Sender<String>,
     stop_send: Sender<()>,
 }
 
-pub enum ProcessResult {
-    Ok(String),
-    NotOk(String),
+pub enum CmdOutput {
+    Finish,
+    Stdout(String),
+    Stderr(String),
 }
 
 impl CommandExecutionHandler {
     pub fn start(execution_mode: ExecutionMode, eval_environment: Vec<String>) -> CommandExecutionHandler {
-        let (cmd_in_send, cmd_in_receive) = mpsc::channel::<String>();
-        let (cmd_out_send, cmd_out_receive) = mpsc::channel::<ProcessResult>();
-        let (stop_send, stop_receive) = mpsc::channel::<()>();
+        let (mut cmd_in_send, mut cmd_in_receive) = mpsc::channel::<String>(10);
+        let (mut cmd_out_send, mut cmd_out_receive) = mpsc::channel::<CmdOutput>(10);
+        let (mut stop_send, mut stop_receive) = mpsc::channel::<()>(10);
 
         let executor = CommandExecutionHandler {
             eval_environment: eval_environment.clone(),
@@ -36,70 +40,66 @@ impl CommandExecutionHandler {
             stop_send,
         };
 
-        thread::spawn(move || {
-            let mut latest_process_handle: Option<Child> = None;
+        tokio::spawn(async move {
+            let first_command_in = cmd_in_receive.recv().await.unwrap();
+            let mut cmd = run_cmd_isolated(&eval_environment, &first_command_in).unwrap();
+
+            let mut child = cmd.spawn().unwrap();
+            let mut stdout_reader = BufReader::new(child.stdout.take().unwrap()).lines();
+            let mut stderr_reader = BufReader::new(child.stderr.take().unwrap()).lines();
+
+            let mut cmd_out_send2 = cmd_out_send.clone();
+            let mut process_handle = tokio::spawn(async move {
+                child.await.unwrap();
+                cmd_out_send2.send(CmdOutput::Finish).await.ok().unwrap();
+            });
 
             loop {
-                if let Ok(cmd) = cmd_in_receive.try_recv() {
-                    let process_handle_result = match execution_mode {
-                        ExecutionMode::UNSAFE => run_cmd_unsafe(&eval_environment, &cmd),
-                        ExecutionMode::ISOLATED => run_cmd_isolated(&eval_environment, &cmd),
-                    };
-
-                    match process_handle_result {
-                        Ok(handle) => {
-                            // replace the latest_process_handle with the new one, killing any old processes
-                            if let Some(mut old_handle) = latest_process_handle.replace(handle) {
-                                old_handle.kill().unwrap();
-                            }
-                        }
-                        Err(error) => cmd_out_send.send(ProcessResult::NotOk(error.into())).unwrap(), // if there's an error, show it!
-                    };
-                }
-
-                // take ownership of the handle and check if the process has finished
-                if let Some(mut handle) = latest_process_handle.take() {
-                    if let Some(status) = handle.try_wait().unwrap() {
-                        // if yes, send out it's output
-                        let command_output = handle.wait_with_output().unwrap();
-
-                        const ERROR_MSG_UNDECODABLE_OUTPUT: &str =
-                            "This program tried to print something to stdout which could not be decoded as utf8. Sorry.";
-
-                        let result = if status.success() {
-                            let stdout = str::from_utf8(&command_output.stdout).unwrap_or(ERROR_MSG_UNDECODABLE_OUTPUT);
-                            ProcessResult::Ok(stdout.to_owned())
+                let mut cmd_out_send2 = cmd_out_send.clone();
+                tokio::select! {
+                    Some(new_cmd) = cmd_in_receive.recv() => {
+                        let mut cmd = Command::new("bash");
+                        cmd.arg("-c");
+                        cmd.arg(new_cmd);
+                        cmd.kill_on_drop(true).stdout(Stdio::piped()).stderr(Stdio::piped());
+                        let new_child = cmd.spawn();
+                        if let Some(mut new_child) = new_child.ok().take() {
+                            stdout_reader = BufReader::new(new_child.stdout.take().unwrap()).lines();
+                            stderr_reader = BufReader::new(new_child.stderr.take().unwrap()).lines();
+                            let new_process_handle = tokio::spawn(async move {
+                                new_child.await.unwrap();
+                                cmd_out_send2.send(CmdOutput::Finish).await.ok().unwrap();
+                            });
+                            drop(std::mem::replace(&mut process_handle, new_process_handle));
                         } else {
-                            let stderr = str::from_utf8(&command_output.stderr).unwrap_or(ERROR_MSG_UNDECODABLE_OUTPUT);
-                            ProcessResult::NotOk(stderr.to_owned())
-                        };
-
-                        cmd_out_send.send(result).unwrap();
-                    } else {
-                        // otherwise give back the process_handle to the latest_process_handle option.
-                        // this code effectively moves the handle out of the option _conditionally_, depending on the try_wait()
-                        latest_process_handle = Some(handle);
+                            cmd_out_send2.send(CmdOutput::Stderr("Error running your line".to_string())).await.ok().unwrap();
+                        }
                     }
-                }
-
-                if let Ok(()) = stop_receive.try_recv() {
-                    break;
-                }
+                    Ok(Some(command_stdout)) = stdout_reader.next_line() => {
+                        cmd_out_send2.send(CmdOutput::Stdout(command_stdout)).await.ok().unwrap();
+                    }
+                    Ok(Some(command_stderr)) = stderr_reader.next_line() => {
+                        cmd_out_send2.send(CmdOutput::Stderr(command_stderr)).await.ok().unwrap();
+                    }
+                    Some(_) = stop_receive.recv() => {
+                        break;
+                    }
+                };
             }
         });
         executor
     }
 
-    pub fn execute(&self, cmd: &str) {
-        self.cmd_in_send.send(cmd.into()).unwrap();
+    pub async fn execute(&mut self, cmd: &str) {
+        self.cmd_in_send.send(cmd.into()).await.unwrap();
     }
 
-    pub fn poll_output(&self) -> Option<ProcessResult> {
+    pub fn poll_output(&mut self) -> Option<CmdOutput> {
         self.cmd_out_receive.try_recv().ok()
     }
 
-    pub fn stop(&self) {
-        self.stop_send.send(()).unwrap();
+    pub async fn stop(&mut self) {
+        self.stop_send.send(()).await.unwrap();
     }
 }
 
@@ -113,7 +113,7 @@ fn run_cmd_isolated(eval_environment: &Vec<String>, cmd: &str) -> Result<Child, 
         .stdout(Stdio::piped())
         .stdin(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn()
+        .kill_on_drop(true)
         .map_err(|err| err.to_string())
 }
 
@@ -128,6 +128,6 @@ fn run_cmd_unsafe(eval_environment: &Vec<String>, cmd: &str) -> Result<Child, St
         .stdout(Stdio::piped())
         .stdin(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn()
+        .kill_on_drop(true)
         .map_err(|err| err.to_string())
 }

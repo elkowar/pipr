@@ -1,11 +1,15 @@
 use super::lineeditor::*;
 use super::{
     command_list_window::CommandListState, key_select_menu::KeySelectMenu, main_window::AutocompleteState, pipr_config::*,
-    Command,
 };
 use crate::command_evaluation::*;
 use crate::commandlist::CommandList;
 use crossterm::event::{KeyCode, KeyModifiers};
+
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::{Child, Command};
+use tokio::stream::StreamExt;
+use tokio::sync::mpsc::{self, Receiver, Sender};
 
 pub const HELP_TEXT: &str = "\
 F1         Show/hide help
@@ -91,18 +95,18 @@ impl App {
         }
     }
 
-    pub fn on_cmd_output(&mut self, process_result: ProcessResult) {
+    pub fn on_cmd_output(&mut self, process_result: CmdOutput) {
         match process_result {
-            ProcessResult::Ok(stdout) => {
+            CmdOutput::Stdout(stdout) => {
                 if self.paranoid_history_mode {
                     self.history.push(self.input_state.content_to_commandentry());
                 }
-                self.command_output = stdout;
+                self.command_output.push_str(&(stdout + "\n"));
                 self.command_error = String::new();
             }
-            ProcessResult::NotOk(stderr) => {
-                self.command_error = stderr;
-            }
+            CmdOutput::Stderr(stderr) => self.command_error.push_str(&(stderr + "\n")),
+
+            CmdOutput::Finish => self.command_output.clear(),
         }
     }
 
@@ -111,7 +115,7 @@ impl App {
         self.history.push(self.input_state.content_to_commandentry());
     }
 
-    pub fn execute_content(&mut self) {
+    pub async fn execute_content(&mut self) {
         let command = self.input_state.content_lines();
         let command = command
             .iter()
@@ -124,11 +128,11 @@ impl App {
             command.join(" ")
         };
 
-        self.execution_handler.execute(&command);
+        self.execution_handler.execute(&command).await;
         self.last_executed_cmd = self.input_state.content_str();
     }
 
-    pub fn on_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
+    pub async fn on_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         let control_pressed = modifiers.contains(KeyModifiers::CONTROL);
         match code {
             KeyCode::F(1) => match self.window_state {
@@ -157,14 +161,15 @@ impl App {
                     self.window_state = WindowState::HistoryList(CommandListState::new(entries, self.history_idx));
                 }
             },
-            _ => self.handle_window_specific_event(code, modifiers),
+            _ => self.handle_window_specific_event(code, modifiers).await,
         }
     }
 
-    pub fn handle_window_specific_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
+    pub async fn handle_window_specific_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         let window_state = &mut self.window_state;
         match window_state {
-            WindowState::Main => self.handle_main_window_tui_event(code, modifiers),
+            WindowState::Main => self.handle_main_window_tui_event(code, modifiers).await,
+
             WindowState::TextView(_, _) => self.window_state = WindowState::Main,
             WindowState::BookmarkList(state) => match code {
                 KeyCode::Esc => {

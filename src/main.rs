@@ -43,7 +43,8 @@ pub struct CliArgs {
     raw_mode: bool,
 }
 
-fn main() -> Result<(), failure::Error> {
+#[tokio::main]
+async fn main() -> Result<(), failure::Error> {
     let args = handle_cli_arguments();
 
     pub const CONFIG_DIR_RELATIVE_TO_HOME: &'static str = ".config/pipr/";
@@ -84,9 +85,9 @@ fn main() -> Result<(), failure::Error> {
 
     // render on stdout if output is not piped into something. if it is, use stderr.
     if atty::is(Stream::Stdout) {
-        run_app(&mut app, io::stdout())?;
+        run_app(&mut app, io::stdout()).await?;
     } else {
-        run_app(&mut app, io::stderr())?;
+        run_app(&mut app, io::stderr()).await?;
     }
 
     after_finish(&app, args.output_file)?;
@@ -161,7 +162,7 @@ fn after_finish(app: &App, out_file: Option<String>) -> Result<(), failure::Erro
     Ok(())
 }
 
-fn run_app<W: Write>(mut app: &mut App, mut output_stream: W) -> Result<(), failure::Error> {
+async fn run_app<W: Write>(mut app: &mut App, mut output_stream: W) -> Result<(), failure::Error> {
     execute!(output_stream, EnterAlternateScreen)?;
     enable_raw_mode()?;
     let backend = CrosstermBackend::new(output_stream);
@@ -176,7 +177,7 @@ fn run_app<W: Write>(mut app: &mut App, mut output_stream: W) -> Result<(), fail
     }));
 
     while !app.should_quit {
-        ui::draw_app(&mut terminal, &mut app)?;
+        ui::draw_app(&mut terminal, &mut app).await?;
 
         loop {
             if let Some(cmd_output) = app.execution_handler.poll_output() {
@@ -188,7 +189,7 @@ fn run_app<W: Write>(mut app: &mut App, mut output_stream: W) -> Result<(), fail
                 match event::read()? {
                     CEvent::Resize(_, _) => break,
                     CEvent::Key(evt) => {
-                        app.on_tui_event(evt.code, evt.modifiers);
+                        app.on_tui_event(evt.code, evt.modifiers).await;
                         break;
                     }
                     _ => {}
@@ -196,7 +197,7 @@ fn run_app<W: Write>(mut app: &mut App, mut output_stream: W) -> Result<(), fail
             }
         }
     }
-    app.execution_handler.stop();
+    app.execution_handler.stop().await;
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     std::io::Write::flush(&mut terminal.backend_mut())?;
