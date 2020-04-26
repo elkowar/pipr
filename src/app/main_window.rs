@@ -1,9 +1,10 @@
 use super::app::*;
 use super::key_select_menu::KeySelectMenu;
 use super::util::*;
-use super::{lineeditor::*, Path};
+use super::{lineeditor::*, Path, Stdio};
 use crossterm::event::{KeyCode, KeyModifiers};
 use std::path::PathBuf;
+use std::process::Command;
 
 #[derive(Debug)]
 pub struct AutocompleteState {
@@ -50,7 +51,14 @@ impl App {
             }
             KeySelectMenuType::OpenWordIn(word) => {
                 if let Some(help_viewer) = self.config.help_viewers.get(&c) {
-                    self.should_jump_to_other_cmd = Some(help_viewer.resolve_to_command(&word));
+                    self.should_jump_to_other_cmd = Some((None, help_viewer.resolve_to_command(&word)));
+                }
+            }
+            KeySelectMenuType::OpenOutputIn(output) => {
+                if let Some(output_viewer) = self.config.output_viewers.get(&c) {
+                    let mut command = Command::new(output_viewer);
+                    command.stdin(Stdio::piped());
+                    self.should_jump_to_other_cmd = Some((Some(output), command));
                 }
             }
         }
@@ -125,6 +133,13 @@ impl App {
                     let key_select_menu = KeySelectMenu::new(options, KeySelectMenuType::OpenWordIn(word.into()));
                     self.opened_key_select_menu = Some(key_select_menu);
                 }
+            }
+            KeyCode::F(6) => {
+                let current_output = self.command_output.to_owned();
+                let output_viewers = &self.config.output_viewers;
+                let options = output_viewers.iter().map(|(&k, v)| (k, v.to_owned())).collect();
+                let key_select_menu = KeySelectMenu::new(options, KeySelectMenuType::OpenOutputIn(current_output.into()));
+                self.opened_key_select_menu = Some(key_select_menu);
             }
 
             KeyCode::Char('s') if control_pressed => self.bookmarks.toggle_entry(self.input_state.content_to_commandentry()),

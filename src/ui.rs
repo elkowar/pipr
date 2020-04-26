@@ -12,9 +12,13 @@ use tui::{backend::Backend, Frame, Terminal};
 use Constraint::*;
 
 pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(), failure::Error> {
-    if let Some(mut should_jump_to_other_cmd) = app.should_jump_to_other_cmd.take() {
+    if let Some((stdin_content, mut should_jump_to_other_cmd)) = app.should_jump_to_other_cmd.take() {
         execute!(io::stdout(), LeaveAlternateScreen)?;
-        should_jump_to_other_cmd.env("MAN_POSIXLY_CORRECT", "1").spawn()?;
+        let mut child = should_jump_to_other_cmd.env("MAN_POSIXLY_CORRECT", "1").spawn()?;
+        if let Some(stdin_content) = stdin_content {
+            child.stdin.take().unwrap().write_all(stdin_content.as_bytes()).unwrap();
+        }
+        child.wait()?;
         execute!(io::stdout(), EnterAlternateScreen)?;
         terminal.resize(terminal.size()?)?; // this will redraw the whole screen
     }

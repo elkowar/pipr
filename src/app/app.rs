@@ -36,6 +36,7 @@ pub enum WindowState {
 pub enum KeySelectMenuType {
     Snippets,
     OpenWordIn(String), // stores the word that should be opened in the selected help
+    OpenOutputIn(String),
 }
 
 pub struct App {
@@ -56,9 +57,9 @@ pub struct App {
     pub raw_mode: bool,
     pub autocomplete_state: Option<AutocompleteState>,
 
-    /// A command that should be executed in the main screen.
+    /// A (stdin, command) that should be executed in the main screen.
     /// this will be taken ( and thus reset ) and handled by the ui module.
-    pub should_jump_to_other_cmd: Option<std::process::Command>,
+    pub should_jump_to_other_cmd: Option<(Option<String>, std::process::Command)>,
 }
 
 impl App {

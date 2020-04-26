@@ -39,6 +39,9 @@ s = \" | sed -r 's/||//g'\"
 [help_viewers]
 'm' = \"man ??\"
 'h' = \"?? --help | less\"
+
+[output_viewers]
+'l' = \"less\"
 ";
 
 #[derive(Debug, Clone)]
@@ -52,6 +55,7 @@ pub struct PiprConfig {
     pub history_size: usize,
     pub snippets: HashMap<char, Snippet>,
     pub help_viewers: HashMap<char, CommandTemplate>,
+    pub output_viewers: HashMap<char, String>,
 }
 
 impl PiprConfig {
@@ -94,6 +98,9 @@ impl PiprConfig {
                 .unwrap_or_else(|_| vec!["bash".into(), "-c".into()]),
             history_size: settings.get::<usize>("history_size").unwrap_or(500),
             cmdlist_always_show_preview: settings.get::<bool>("cmdlist_always_show_preview").unwrap_or(false),
+            output_viewers: settings
+                .get::<HashMap<char, String>>("output_viewers")
+                .unwrap_or_else(|_| hashmap! { 'l' => "less".into() }),
             help_viewers,
             snippets,
         }
