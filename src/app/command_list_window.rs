@@ -10,7 +10,7 @@ pub struct CommandListState {
 impl CommandListState {
     pub fn new(list: Vec<CommandEntry>, selected_idx: Option<usize>) -> CommandListState {
         CommandListState {
-            selected_idx: selected_idx.or(if list.len() == 0 { None } else { Some(list.len() - 1) }),
+            selected_idx: selected_idx.or(if list.is_empty() { None } else { Some(list.len() - 1) }),
             list,
             recently_deleted: Vec::new(),
         }
@@ -25,7 +25,7 @@ impl CommandListState {
                 KeyCode::PageUp | KeyCode::Char('g') => {
                     self.selected_idx = if selected_idx >= 5 { Some(selected_idx - 5) } else { Some(0) };
                 }
-                KeyCode::PageDown | KeyCode::Char('G') if self.list.len() > 0 => {
+                KeyCode::PageDown | KeyCode::Char('G') if !self.list.is_empty() => {
                     self.selected_idx = if (selected_idx as isize) < (self.list.len() as isize - 5) {
                         Some(selected_idx + 5)
                     } else {
@@ -38,7 +38,9 @@ impl CommandListState {
                     self.selected_idx = Some(selected_idx + 1)
                 }
                 KeyCode::Char('u') => {
-                    self.recently_deleted.pop().map(|entry| self.list.push(entry));
+                    if let Some(entry) = self.recently_deleted.pop() {
+                        self.list.push(entry);
+                    }
                     self.selected_idx = Some(self.list.len() - 1);
                 }
                 KeyCode::Delete | KeyCode::Backspace => {

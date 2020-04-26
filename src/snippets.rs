@@ -13,7 +13,7 @@ impl Snippet {
     pub fn parse(s: &str) -> Snippet {
         Snippet {
             text: str::replace(s, "||", ""),
-            cursor_offset: s.find("||").unwrap_or(s.len()),
+            cursor_offset: s.find("||").unwrap_or_else(|| s.len()),
         }
     }
 

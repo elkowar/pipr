@@ -48,7 +48,7 @@ pub struct CliArgs {
 async fn main() -> Result<(), failure::Error> {
     let args = handle_cli_arguments();
 
-    pub const CONFIG_DIR_RELATIVE_TO_HOME: &'static str = ".config/pipr/";
+    pub const CONFIG_DIR_RELATIVE_TO_HOME: &str = ".config/pipr/";
     let config_path = Path::new(&env::var("HOME").unwrap()).join(CONFIG_DIR_RELATIVE_TO_HOME);
 
     let config = PiprConfig::load_from_file(&config_path.join("pipr.toml"));
@@ -147,7 +147,7 @@ fn after_finish(app: &App, out_file: Option<String>) -> Result<(), failure::Erro
     };
 
     if let Some(finish_hook) = &app.config.finish_hook {
-        let mut finish_hook = finish_hook.split(" ");
+        let mut finish_hook = finish_hook.split(' ');
         if let Some(cmd) = finish_hook.next() {
             let mut child = Command::new(cmd).args(finish_hook).stdin(Stdio::piped()).spawn()?;
             let stdin = child.stdin.as_mut().unwrap();

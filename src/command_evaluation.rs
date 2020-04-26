@@ -59,7 +59,7 @@ impl CommandExecutionHandler {
                             Ok(mut child) =>  {
                                 out_lines_stream = Right(io::BufReader::new(child.stdout.take().unwrap()).lines());
                                 err_lines_stream = Right(io::BufReader::new(child.stderr.take().unwrap()).lines());
-                                handle = Right(tokio::time::timeout(cmd_timeout.into(), child));
+                                handle = Right(tokio::time::timeout(cmd_timeout, child));
                             }
                             Err(err) => cmd_out_send.send(CmdOutput::NotOk(err)).await.ok().unwrap(),
                         }
@@ -116,12 +116,12 @@ impl CommandExecutionHandler {
     }
 }
 
-fn run_cmd_isolated(eval_environment: &Vec<String>, cmd: &str) -> Result<Child, String> {
+fn run_cmd_isolated(eval_environment: &[String], cmd: &str) -> Result<Child, String> {
     const BUBBLEWRAP_ARGS: &str =
         "--ro-bind / / --tmpfs /tmp --dev /dev --proc /proc --die-with-parent --share-net --unshare-pid";
     Command::new("bwrap")
-        .args(BUBBLEWRAP_ARGS.split(" "))
-        .args(eval_environment.into_iter())
+        .args(BUBBLEWRAP_ARGS.split(' '))
+        .args(eval_environment.iter())
         .arg(cmd)
         .stdout(Stdio::piped())
         .stdin(Stdio::piped())
@@ -131,11 +131,11 @@ fn run_cmd_isolated(eval_environment: &Vec<String>, cmd: &str) -> Result<Child, 
         .map_err(|_| "Unable to spawn command".to_string())
 }
 
-fn run_cmd_unsafe(eval_environment: &Vec<String>, cmd: &str) -> Result<Child, String> {
+fn run_cmd_unsafe(eval_environment: &[String], cmd: &str) -> Result<Child, String> {
     if cmd.contains("rm ") || cmd.contains("mv ") || cmd.contains("dd ") {
         return Err("Will not run this command, it's for your own good. Believe me.".to_string());
     }
-    let mut eval_environment = eval_environment.into_iter();
+    let mut eval_environment = eval_environment.iter();
     Command::new(eval_environment.next().expect("eval_environment is empty"))
         .args(eval_environment)
         .arg(cmd)

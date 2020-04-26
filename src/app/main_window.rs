@@ -31,7 +31,7 @@ impl AutocompleteState {
         if self.current_idx == 0 {
             self.current_idx = self.options.len() - 1;
         } else {
-            self.current_idx = self.current_idx - 1;
+            self.current_idx -= 1;
         }
     }
     fn selected(&self) -> &str {
@@ -197,7 +197,7 @@ fn provide_path_autocomplete(word: &str) -> Option<Vec<String>> {
         entries.filter_map(|entry| entry.ok()).collect()
     } else {
         let started_subfile_name = path.file_name().unwrap().to_string_lossy().to_string();
-        let parent_path = path.parent().unwrap_or(Path::new("./"));
+        let parent_path = path.parent().unwrap_or_else(|| Path::new("./"));
         if let Ok(parent_entries) = parent_path.read_dir() {
             parent_entries
                 .filter_map(|entry| entry.ok())

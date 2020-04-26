@@ -112,7 +112,7 @@ impl App {
         let command = self.input_state.content_lines();
         let command = command
             .iter()
-            .filter(|line| !line.starts_with("#"))
+            .filter(|line| !line.starts_with('#'))
             .map(|x| x.to_owned())
             .collect::<Vec<String>>();
         let command = if self.raw_mode {

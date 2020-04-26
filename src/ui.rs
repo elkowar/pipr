@@ -75,7 +75,7 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result
                 draw_outputs(
                     &mut f,
                     exec_chunks[2],
-                    &app.input_state.content_str() == &app.last_executed_cmd,
+                    app.input_state.content_str() == app.last_executed_cmd,
                     &app.command_output,
                     &app.command_error,
                 );
