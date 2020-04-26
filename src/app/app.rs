@@ -6,8 +6,6 @@ use crate::command_evaluation::*;
 use crate::commandlist::CommandList;
 use crossterm::event::{KeyCode, KeyModifiers};
 
-use tokio::process::Command;
-
 pub const HELP_TEXT: &str = "\
 F1         Show/hide help
 F2         Toggle autoeval
@@ -60,7 +58,7 @@ pub struct App {
 
     /// A command that should be executed in the main screen.
     /// this will be taken ( and thus reset ) and handled by the ui module.
-    pub should_jump_to_other_cmd: Option<Command>,
+    pub should_jump_to_other_cmd: Option<std::process::Command>,
 }
 
 impl App {

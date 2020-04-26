@@ -11,10 +11,10 @@ use tui::widgets::{Block, Borders, List, ListState, Paragraph, Text};
 use tui::{backend::Backend, Frame, Terminal};
 use Constraint::*;
 
-pub async fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(), failure::Error> {
+pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(), failure::Error> {
     if let Some(mut should_jump_to_other_cmd) = app.should_jump_to_other_cmd.take() {
         execute!(io::stdout(), LeaveAlternateScreen)?;
-        should_jump_to_other_cmd.env("MAN_POSIXLY_CORRECT", "1").spawn()?.await?;
+        should_jump_to_other_cmd.env("MAN_POSIXLY_CORRECT", "1").spawn()?;
         execute!(io::stdout(), EnterAlternateScreen)?;
         terminal.resize(terminal.size()?)?; // this will redraw the whole screen
     }
@@ -182,6 +182,7 @@ fn draw_outputs<B: Backend>(f: &mut Frame<B>, rect: Rect, changed: bool, stdout:
         .split(rect);
 
     let stdout_title = format!("Output{}", if changed { "" } else { " [+]" });
+    // TODO only render the amount of lines that is actually visible, or make it scrollable
     f.render_widget(
         Paragraph::new([Text::raw(stdout)].iter()).block(make_default_block(&stdout_title, false)),
         output_chunks[0],

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fs::{DirBuilder, File};
 use std::io::prelude::*;
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
 use super::snippets::*;
 use crate::command_template::CommandTemplate;
@@ -27,6 +27,7 @@ autoeval_mode_default = false
 
 history_size = 500
 cmdlist_always_show_preview = false
+cmd_timeout_millis = 2000
 
 eval_environment = [\"bash\", \"-c\"]
 
@@ -58,6 +59,7 @@ pub struct PiprConfig {
     pub paranoid_history_mode_default: bool,
     pub eval_environment: Vec<String>,
     pub autoeval_mode_default: bool,
+    pub cmd_timeout: Duration,
     pub history_size: usize,
     pub snippets: HashMap<char, Snippet>,
     pub help_viewers: HashMap<char, CommandTemplate>,
@@ -107,6 +109,7 @@ impl PiprConfig {
             isolation_path_additions: settings.get::<Vec<String>>("isolation_path_additions").unwrap_or(Vec::new()),
             paranoid_history_mode_default: settings.get::<bool>("paranoid_history_mode_default").unwrap_or(false),
             autoeval_mode_default: settings.get::<bool>("autoeval_mode_default").unwrap_or(false),
+            cmd_timeout: Duration::from_millis(settings.get::<u64>("cmd_timeout_millis").unwrap_or(2000)),
             eval_environment: settings
                 .get::<Vec<String>>("eval_environment")
                 .unwrap_or(vec!["bash".into(), "-c".into()]),

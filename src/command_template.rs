@@ -1,4 +1,4 @@
-use tokio::process::Command;
+use std::process::Command;
 pub const COMMAND_TEMPLATE_PLACEHOLDER_TOKEN: &str = "??";
 
 #[derive(Debug, PartialEq, Clone)]

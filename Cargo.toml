@@ -24,7 +24,7 @@ gitlab = { repository = "Elkowar/pipr", branch = "master" }
 [dependencies]
 tui = { version = "0.9", default-features = false, features = ['crossterm'] }
 config = { version = "0.9", features = ['toml'] }
-crossterm = "0.17"
+crossterm = { version = "0.17", features = ['event-stream'] }
 failure = "0.1.6"
 itertools = "0.9"
 unicode-width = "0.1.5"

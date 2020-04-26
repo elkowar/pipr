@@ -10,10 +10,11 @@ use std::io;
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use tokio::stream::StreamExt;
 use tui::{backend::CrosstermBackend, Terminal};
 
 use crossterm::{
-    event::{self, Event as CEvent},
+    event::Event as CEvent,
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -65,7 +66,7 @@ async fn main() -> Result<(), failure::Error> {
         std::process::exit(1);
     }
 
-    let execution_handler = CommandExecutionHandler::start(execution_mode, config.eval_environment.clone());
+    let execution_handler = CommandExecutionHandler::start(config.cmd_timeout, execution_mode, config.eval_environment.clone());
 
     let bookmarks = CommandList::load_from_file(config_path.join("bookmarks"), None);
     let history = CommandList::load_from_file(config_path.join("history"), Some(config.history_size));
@@ -176,31 +177,22 @@ async fn run_app<W: Write>(mut app: &mut App, mut output_stream: W) -> Result<()
         std::process::exit(1);
     }));
 
+    let mut crossterm_event_stream = crossterm::event::EventStream::new();
     while !app.should_quit {
-        ui::draw_app(&mut terminal, &mut app).await?;
+        ui::draw_app(&mut terminal, &mut app)?;
 
-        loop {
-            if let Some(cmd_output) = app.execution_handler.poll_output() {
-                app.on_cmd_output(cmd_output);
-                break;
+        tokio::select! {
+            Some(cmd_output) = app.execution_handler.cmd_out_receive.recv() => app.on_cmd_output(cmd_output),
+            Some(maybe_event) = crossterm_event_stream.next() => match maybe_event {
+                Ok(CEvent::Key(key_evt)) => app.on_tui_event(key_evt.code, key_evt.modifiers).await,
+                Err(_) => break,
+                _ => {}
             }
-
-            if let Ok(true) = event::poll(std::time::Duration::from_millis(100)) {
-                match event::read()? {
-                    CEvent::Resize(_, _) => break,
-                    CEvent::Key(evt) => {
-                        app.on_tui_event(evt.code, evt.modifiers).await;
-                        break;
-                    }
-                    _ => {}
-                }
-            }
-        }
+        };
     }
     app.execution_handler.stop().await;
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     std::io::Write::flush(&mut terminal.backend_mut())?;
-
     Ok(())
 }

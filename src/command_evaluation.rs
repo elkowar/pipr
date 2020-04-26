@@ -1,7 +1,7 @@
 use futures::future::Either::*;
 use futures::stream::StreamExt;
 use std::process::Stdio;
-use std::str;
+use std::{str, time::Duration};
 use tokio::io::{self, AsyncBufReadExt};
 use tokio::process::{Child, Command};
 use tokio::sync::mpsc::{self, Receiver, Sender};
@@ -15,7 +15,8 @@ pub enum ExecutionMode {
 pub struct CommandExecutionHandler {
     pub execution_mode: ExecutionMode,
     pub eval_environment: Vec<String>,
-    cmd_out_receive: Receiver<CmdOutput>,
+    pub cmd_timeout: Duration,
+    pub cmd_out_receive: Receiver<CmdOutput>,
     cmd_in_send: Sender<String>,
     stop_send: Sender<()>,
 }
@@ -26,13 +27,14 @@ pub enum CmdOutput {
 }
 
 impl CommandExecutionHandler {
-    pub fn start(execution_mode: ExecutionMode, eval_environment: Vec<String>) -> CommandExecutionHandler {
+    pub fn start(cmd_timeout: Duration, execution_mode: ExecutionMode, eval_environment: Vec<String>) -> CommandExecutionHandler {
         let (cmd_in_send, mut cmd_in_receive) = mpsc::channel::<String>(10);
         let (mut cmd_out_send, cmd_out_receive) = mpsc::channel::<CmdOutput>(10);
         let (stop_send, mut stop_receive) = mpsc::channel::<()>(10);
 
         let executor = CommandExecutionHandler {
             eval_environment: eval_environment.clone(),
+            cmd_timeout,
             execution_mode,
             cmd_in_send,
             cmd_out_receive,
@@ -57,28 +59,40 @@ impl CommandExecutionHandler {
                             Ok(mut child) =>  {
                                 out_lines_stream = Right(io::BufReader::new(child.stdout.take().unwrap()).lines());
                                 err_lines_stream = Right(io::BufReader::new(child.stderr.take().unwrap()).lines());
-                                handle = Right(child);
+                                handle = Right(tokio::time::timeout(cmd_timeout.into(), child));
                             }
                             Err(err) => cmd_out_send.send(CmdOutput::NotOk(err)).await.ok().unwrap(),
                         }
                     }
+
                     Some(out_line) = out_lines_stream.next() => out_lines.push_str(&(out_line.unwrap() + "\n")),
                     Some(err_line) = err_lines_stream.next() => err_lines.push_str(&(err_line.unwrap() + "\n")),
+
                     result = &mut handle => {
-                        let cmd_output = if result.unwrap().success() {
-                            if let Right(stream) = out_lines_stream {
-                                let pending_lines = stream.map(|x| x.unwrap()).collect::<Vec<String>>().await;
-                                out_lines.push_str(&pending_lines.join("\n"));
-                            }
-                            CmdOutput::Ok(out_lines)
-                        } else {
-                            if let Right(stream) = err_lines_stream {
-                                let pending_lines = stream.map(|x| x.unwrap()).collect::<Vec<String>>().await;
-                                err_lines.push_str(&pending_lines.join("\n"));
-                            }
-                            CmdOutput::NotOk(err_lines)
+                        // resulting_output contains the command's output if everything went well,
+                        // stderr if it exited non-zero, and if any other error occured information about that.
+                        let resulting_output = match result {
+                            Ok(Ok(result)) => {
+                                if result.success() {
+                                    if let Right(stream) = out_lines_stream {
+                                        let pending_lines = stream.map(|x| x.unwrap()).collect::<Vec<String>>().await;
+                                        out_lines.push_str(&pending_lines.join("\n"));
+                                    }
+                                    CmdOutput::Ok(out_lines)
+                                } else {
+                                    if let Right(stream) = err_lines_stream {
+                                        let pending_lines = stream.map(|x| x.unwrap()).collect::<Vec<String>>().await;
+                                        err_lines.push_str(&pending_lines.join("\n"));
+                                    }
+                                    CmdOutput::NotOk(err_lines)
+                                }
+                            },
+
+                            Err(_) => CmdOutput::NotOk("Command timed out".to_string()),
+                            Ok(Err(err)) => CmdOutput::NotOk(format!("Error running command: {}", err)),
                         };
-                        cmd_out_send.send(cmd_output).await.ok().unwrap();
+
+                        cmd_out_send.send(resulting_output).await.ok().unwrap();
 
                         handle = Left(futures::future::pending());
                         out_lines_stream = Left(futures::stream::pending());
@@ -95,10 +109,6 @@ impl CommandExecutionHandler {
 
     pub async fn execute(&mut self, cmd: &str) {
         self.cmd_in_send.send(cmd.into()).await.unwrap();
-    }
-
-    pub fn poll_output(&mut self) -> Option<CmdOutput> {
-        self.cmd_out_receive.try_recv().ok()
     }
 
     pub async fn stop(&mut self) {
