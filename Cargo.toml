@@ -1,6 +1,6 @@
 [package]
 name = "pipr"
-version = "0.0.9"
+version = "0.0.10"
 authors = ["Leon Kowarschick"]
 edition = "2018"
 license = "MIT"
