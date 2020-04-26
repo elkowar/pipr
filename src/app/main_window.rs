@@ -5,11 +5,6 @@ use super::{lineeditor::*, Path};
 use crossterm::event::{KeyCode, KeyModifiers};
 use std::path::PathBuf;
 
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::{Child, Command};
-use tokio::stream::StreamExt;
-use tokio::sync::mpsc::{self, Receiver, Sender};
-
 #[derive(Debug)]
 pub struct AutocompleteState {
     pub original_prompt: String,

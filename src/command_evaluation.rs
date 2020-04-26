@@ -1,9 +1,9 @@
-//use std::process::{Child, Command, Stdio};
+use futures::future::Either::*;
+use futures::stream::StreamExt;
 use std::process::Stdio;
 use std::str;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{self, AsyncBufReadExt};
 use tokio::process::{Child, Command};
-use tokio::stream::StreamExt;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
@@ -21,16 +21,15 @@ pub struct CommandExecutionHandler {
 }
 
 pub enum CmdOutput {
-    Finish,
-    Stdout(String),
-    Stderr(String),
+    Ok(String),
+    NotOk(String),
 }
 
 impl CommandExecutionHandler {
     pub fn start(execution_mode: ExecutionMode, eval_environment: Vec<String>) -> CommandExecutionHandler {
-        let (mut cmd_in_send, mut cmd_in_receive) = mpsc::channel::<String>(10);
-        let (mut cmd_out_send, mut cmd_out_receive) = mpsc::channel::<CmdOutput>(10);
-        let (mut stop_send, mut stop_receive) = mpsc::channel::<()>(10);
+        let (cmd_in_send, mut cmd_in_receive) = mpsc::channel::<String>(10);
+        let (mut cmd_out_send, cmd_out_receive) = mpsc::channel::<CmdOutput>(10);
+        let (stop_send, mut stop_receive) = mpsc::channel::<()>(10);
 
         let executor = CommandExecutionHandler {
             eval_environment: eval_environment.clone(),
@@ -41,49 +40,53 @@ impl CommandExecutionHandler {
         };
 
         tokio::spawn(async move {
-            let first_command_in = cmd_in_receive.recv().await.unwrap();
-            let mut cmd = run_cmd_isolated(&eval_environment, &first_command_in).unwrap();
+            let mut handle = Left(futures::future::pending());
 
-            let mut child = cmd.spawn().unwrap();
-            let mut stdout_reader = BufReader::new(child.stdout.take().unwrap()).lines();
-            let mut stderr_reader = BufReader::new(child.stderr.take().unwrap()).lines();
-
-            let mut cmd_out_send2 = cmd_out_send.clone();
-            let mut process_handle = tokio::spawn(async move {
-                child.await.unwrap();
-                cmd_out_send2.send(CmdOutput::Finish).await.ok().unwrap();
-            });
-
+            let mut out_lines_stream = Left(futures::stream::pending());
+            let mut err_lines_stream = Left(futures::stream::pending());
+            let mut out_lines = String::new();
+            let mut err_lines = String::new();
             loop {
-                let mut cmd_out_send2 = cmd_out_send.clone();
                 tokio::select! {
                     Some(new_cmd) = cmd_in_receive.recv() => {
-                        let mut cmd = Command::new("bash");
-                        cmd.arg("-c");
-                        cmd.arg(new_cmd);
-                        cmd.kill_on_drop(true).stdout(Stdio::piped()).stderr(Stdio::piped());
-                        let new_child = cmd.spawn();
-                        if let Some(mut new_child) = new_child.ok().take() {
-                            stdout_reader = BufReader::new(new_child.stdout.take().unwrap()).lines();
-                            stderr_reader = BufReader::new(new_child.stderr.take().unwrap()).lines();
-                            let new_process_handle = tokio::spawn(async move {
-                                new_child.await.unwrap();
-                                cmd_out_send2.send(CmdOutput::Finish).await.ok().unwrap();
-                            });
-                            drop(std::mem::replace(&mut process_handle, new_process_handle));
-                        } else {
-                            cmd_out_send2.send(CmdOutput::Stderr("Error running your line".to_string())).await.ok().unwrap();
+                        let child = match execution_mode {
+                            ExecutionMode::UNSAFE => run_cmd_unsafe(&eval_environment, &new_cmd),
+                            ExecutionMode::ISOLATED => run_cmd_isolated(&eval_environment, &new_cmd),
+                        };
+                        match child {
+                            Ok(mut child) =>  {
+                                out_lines_stream = Right(io::BufReader::new(child.stdout.take().unwrap()).lines());
+                                err_lines_stream = Right(io::BufReader::new(child.stderr.take().unwrap()).lines());
+                                handle = Right(child);
+                            }
+                            Err(err) => cmd_out_send.send(CmdOutput::NotOk(err)).await.ok().unwrap(),
                         }
                     }
-                    Ok(Some(command_stdout)) = stdout_reader.next_line() => {
-                        cmd_out_send2.send(CmdOutput::Stdout(command_stdout)).await.ok().unwrap();
+                    Some(out_line) = out_lines_stream.next() => out_lines.push_str(&(out_line.unwrap() + "\n")),
+                    Some(err_line) = err_lines_stream.next() => err_lines.push_str(&(err_line.unwrap() + "\n")),
+                    result = &mut handle => {
+                        let cmd_output = if result.unwrap().success() {
+                            if let Right(stream) = out_lines_stream {
+                                let pending_lines = stream.map(|x| x.unwrap()).collect::<Vec<String>>().await;
+                                out_lines.push_str(&pending_lines.join("\n"));
+                            }
+                            CmdOutput::Ok(out_lines)
+                        } else {
+                            if let Right(stream) = err_lines_stream {
+                                let pending_lines = stream.map(|x| x.unwrap()).collect::<Vec<String>>().await;
+                                err_lines.push_str(&pending_lines.join("\n"));
+                            }
+                            CmdOutput::NotOk(err_lines)
+                        };
+                        cmd_out_send.send(cmd_output).await.ok().unwrap();
+
+                        handle = Left(futures::future::pending());
+                        out_lines_stream = Left(futures::stream::pending());
+                        err_lines_stream = Left(futures::stream::pending());
+                        out_lines = String::new();
+                        err_lines = String::new();
                     }
-                    Ok(Some(command_stderr)) = stderr_reader.next_line() => {
-                        cmd_out_send2.send(CmdOutput::Stderr(command_stderr)).await.ok().unwrap();
-                    }
-                    Some(_) = stop_receive.recv() => {
-                        break;
-                    }
+                    Some(_) = stop_receive.recv() => break,
                 };
             }
         });
@@ -114,7 +117,8 @@ fn run_cmd_isolated(eval_environment: &Vec<String>, cmd: &str) -> Result<Child, 
         .stdin(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true)
-        .map_err(|err| err.to_string())
+        .spawn()
+        .map_err(|_| "Unable to spawn command".to_string())
 }
 
 fn run_cmd_unsafe(eval_environment: &Vec<String>, cmd: &str) -> Result<Child, String> {
@@ -129,5 +133,6 @@ fn run_cmd_unsafe(eval_environment: &Vec<String>, cmd: &str) -> Result<Child, St
         .stdin(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true)
-        .map_err(|err| err.to_string())
+        .spawn()
+        .map_err(|_| "Unable to spawn command".to_string())
 }

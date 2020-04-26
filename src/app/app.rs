@@ -6,10 +6,7 @@ use crate::command_evaluation::*;
 use crate::commandlist::CommandList;
 use crossterm::event::{KeyCode, KeyModifiers};
 
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::{Child, Command};
-use tokio::stream::StreamExt;
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::process::Command;
 
 pub const HELP_TEXT: &str = "\
 F1         Show/hide help
@@ -97,16 +94,14 @@ impl App {
 
     pub fn on_cmd_output(&mut self, process_result: CmdOutput) {
         match process_result {
-            CmdOutput::Stdout(stdout) => {
+            CmdOutput::Ok(stdout) => {
                 if self.paranoid_history_mode {
                     self.history.push(self.input_state.content_to_commandentry());
                 }
-                self.command_output.push_str(&(stdout + "\n"));
+                self.command_output = stdout;
                 self.command_error = String::new();
             }
-            CmdOutput::Stderr(stderr) => self.command_error.push_str(&(stderr + "\n")),
-
-            CmdOutput::Finish => self.command_output.clear(),
+            CmdOutput::NotOk(stderr) => self.command_error = stderr,
         }
     }
 
