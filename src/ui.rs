@@ -4,12 +4,27 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
 };
-use std::io::{self, Write};
+use std::{
+    borrow::Cow,
+    io::{self, Write},
+};
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
 use tui::widgets::{Block, Borders, List, ListState, Paragraph, Text};
 use tui::{backend::Backend, Frame, Terminal};
 use Constraint::*;
+
+use syntect::easy::HighlightLines;
+use syntect::highlighting::{self, Theme, ThemeSet};
+use syntect::parsing::{SyntaxReference, SyntaxSet};
+use syntect::util::LinesWithEndings;
+
+lazy_static! {
+    static ref THEME_SET: ThemeSet = ThemeSet::load_defaults();
+    static ref SYNTAX_SET: SyntaxSet = SyntaxSet::load_defaults_newlines();
+    static ref THEME: &'static Theme = THEME_SET.themes.get("base16-ocean.dark").unwrap();
+    static ref SYNTAX: &'static SyntaxReference = SYNTAX_SET.find_syntax_by_extension("sh").unwrap();
+}
 
 pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(), failure::Error> {
     if let Some((stdin_content, mut should_jump_to_other_cmd)) = app.should_jump_to_other_cmd.take() {
@@ -159,6 +174,12 @@ fn draw_command_list<B: Backend>(f: &mut Frame<B>, rect: Rect, always_show_previ
 }
 
 fn draw_input_field<B: Backend>(f: &mut Frame<B>, rect: Rect, app: &App) {
+    // TODO this is hideously inefficient
+    //      also make themes configurable?
+    //      also highlight errors if possible?
+
+    let mut highlighter = HighlightLines::new(*SYNTAX, &THEME);
+
     let lines = app.input_state.content_lines().iter().map(|line| {
         let mut line = line.clone();
         if line.len() > rect.width as usize - 5 {
@@ -167,6 +188,17 @@ fn draw_input_field<B: Backend>(f: &mut Frame<B>, rect: Rect, app: &App) {
         }
         line
     });
+
+    let lines_joined = lines.collect::<Vec<String>>().join("\n");
+    let lines: Vec<Text> = if app.config.highlighting_enabled {
+        LinesWithEndings::from(&lines_joined)
+            .flat_map(|line| highlighter.highlight(line, &SYNTAX_SET))
+            .map(|(style, part)| Text::Styled(Cow::Borrowed(part), highlight_style_to_tui_style(&style)))
+            .collect::<Vec<Text>>()
+    } else {
+        vec![Text::raw(lines_joined)]
+    };
+
     let is_bookmarked = app.bookmarks.entries.contains(&app.input_state.content_to_commandentry());
     let input_block_title = format!(
         "Command{}{}{}",
@@ -180,7 +212,7 @@ fn draw_input_field<B: Backend>(f: &mut Frame<B>, rect: Rect, app: &App) {
     );
 
     f.render_widget(
-        List::new(lines.map(Text::raw)).block(make_default_block(&input_block_title, true)),
+        Paragraph::new(lines.iter()).block(make_default_block(&input_block_title, true)),
         rect,
     );
 }
@@ -237,4 +269,10 @@ fn display_processing_state(state: Option<u8>) -> &'static str {
         Some(5) => " ⠻",
         _ => "",
     }
+}
+
+fn highlight_style_to_tui_style(style: &highlighting::Style) -> Style {
+    let fg = style.foreground;
+    Style::default().fg(Color::Rgb(fg.r, fg.g, fg.b))
+    //.bg(Color::Rgb(bg.r, bg.g, bg.b))
 }
