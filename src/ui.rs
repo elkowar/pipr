@@ -23,7 +23,8 @@ lazy_static! {
     static ref THEME_SET: ThemeSet = ThemeSet::load_defaults();
     static ref SYNTAX_SET: SyntaxSet = SyntaxSet::load_defaults_newlines();
     static ref THEME: &'static Theme = THEME_SET.themes.get("base16-ocean.dark").unwrap();
-    static ref SYNTAX: &'static SyntaxReference = SYNTAX_SET.find_syntax_by_extension("sh").unwrap();
+    static ref SH_SYNTAX: &'static SyntaxReference = SYNTAX_SET.find_syntax_by_extension("sh").unwrap();
+    static ref PLAINTEXT_SYNTAX: &'static SyntaxReference = SYNTAX_SET.find_syntax_plain_text();
 }
 
 pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(), failure::Error> {
@@ -101,6 +102,7 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result
                     exec_chunks[2],
                     app.input_state.content_str() == app.last_executed_cmd,
                     app.is_processing_state,
+                    app.config.output_highlighting_enabled,
                     &app.command_output,
                     &app.command_error,
                 );
@@ -178,7 +180,7 @@ fn draw_input_field<B: Backend>(f: &mut Frame<B>, rect: Rect, app: &App) {
     //      also make themes configurable?
     //      also highlight errors if possible?
 
-    let mut highlighter = HighlightLines::new(*SYNTAX, &THEME);
+    let mut highlighter = HighlightLines::new(*SH_SYNTAX, &THEME);
 
     let lines = app.input_state.content_lines().iter().map(|line| {
         let mut line = line.clone();
@@ -222,6 +224,7 @@ fn draw_outputs<B: Backend>(
     rect: Rect,
     changed: bool,
     processing_state: Option<u8>,
+    enable_output_highlighting: bool,
     stdout: &str,
     stderr: &str,
 ) {
@@ -235,9 +238,21 @@ fn draw_outputs<B: Backend>(
         if changed { "" } else { " [+]" },
         display_processing_state(processing_state)
     );
+
+    let mut highlighter = HighlightLines::new(&PLAINTEXT_SYNTAX, &THEME);
+
+    let lines: Vec<Text> = if enable_output_highlighting {
+        LinesWithEndings::from(stdout)
+            .flat_map(|line| highlighter.highlight(line, &SYNTAX_SET))
+            .map(|(style, part)| Text::Styled(Cow::Borrowed(part), highlight_style_to_tui_style(&style)))
+            .collect::<Vec<Text>>()
+    } else {
+        vec![Text::raw(stdout)]
+    };
+
     // TODO only render the amount of lines that is actually visible, or make it scrollable
     f.render_widget(
-        Paragraph::new([Text::raw(stdout)].iter()).block(make_default_block(&stdout_title, false)),
+        Paragraph::new(lines.iter()).block(make_default_block(&stdout_title, false)),
         output_chunks[0],
     );
 
