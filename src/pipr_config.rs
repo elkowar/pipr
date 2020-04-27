@@ -60,7 +60,6 @@ pub struct PiprConfig {
     pub help_viewers: HashMap<char, CommandTemplate>,
     pub output_viewers: HashMap<char, String>,
     pub highlighting_enabled: bool,
-    pub output_highlighting_enabled: bool,
 }
 
 impl PiprConfig {
@@ -104,7 +103,6 @@ impl PiprConfig {
             history_size: settings.get::<usize>("history_size").unwrap_or(500),
             cmdlist_always_show_preview: settings.get::<bool>("cmdlist_always_show_preview").unwrap_or(false),
             highlighting_enabled: settings.get::<bool>("highlighting_enabled").unwrap_or(true),
-            output_highlighting_enabled: settings.get::<bool>("output_highlighting_enabled").unwrap_or(false),
             output_viewers: settings
                 .get::<HashMap<char, String>>("output_viewers")
                 .unwrap_or_else(|_| hashmap! { 'l' => "less".into() }),
