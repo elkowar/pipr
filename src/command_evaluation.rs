@@ -110,7 +110,7 @@ impl CommandExecutionHandler {
                                         match results {
                                             Ok(pending_lines) => {
                                                 err_lines.push_str(&pending_lines.join("\n"));
-                                                CmdOutput::NotOk(out_lines)
+                                                CmdOutput::NotOk(err_lines)
                                             }
                                             Err(err) => CmdOutput::NotOk(format!("{}", err)),
                                         }
