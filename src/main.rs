@@ -177,9 +177,13 @@ async fn run_app<W: Write>(mut app: &mut App, mut output_stream: W) -> Result<()
         std::process::exit(1);
     }));
 
+    let mut all_errors = Vec::new();
     let mut crossterm_event_stream = crossterm::event::EventStream::new();
     while !app.should_quit {
-        ui::draw_app(&mut terminal, &mut app)?;
+        let draw_result = ui::draw_app(&mut terminal, &mut app);
+        if let Err(err) = draw_result {
+            all_errors.push(format!("{}", err));
+        }
 
         tokio::select! {
             Some(cmd_output) = app.execution_handler.cmd_out_receive.recv() => app.on_cmd_output(cmd_output),
@@ -194,5 +198,8 @@ async fn run_app<W: Write>(mut app: &mut App, mut output_stream: W) -> Result<()
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     std::io::Write::flush(&mut terminal.backend_mut())?;
+    if !all_errors.is_empty() {
+        eprintln!("{}", all_errors.join("\n"));
+    }
     Ok(())
 }

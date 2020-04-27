@@ -16,7 +16,11 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result
         execute!(io::stdout(), LeaveAlternateScreen)?;
         let mut child = should_jump_to_other_cmd.env("MAN_POSIXLY_CORRECT", "1").spawn()?;
         if let Some(stdin_content) = stdin_content {
-            child.stdin.take().unwrap().write_all(stdin_content.as_bytes()).unwrap();
+            let _ = child
+                .stdin
+                .take()
+                .expect("Command given to should_jump_to_other_cmd did not provide stdin pipe")
+                .write_all(stdin_content.as_bytes());
         }
         child.wait()?;
         execute!(io::stdout(), EnterAlternateScreen)?;
@@ -57,9 +61,10 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result
                     .split(root_chunks[1]);
 
                 if let Some(opened_key_select_menu) = &app.opened_key_select_menu {
+                    // TODO render specific title
                     let options = opened_key_select_menu.option_list_strings();
                     f.render_widget(
-                        List::new(options.map(Text::raw)).block(make_default_block("Snippets", false)),
+                        List::new(options.map(Text::raw)).block(make_default_block("Open in", false)),
                         root_chunks[0],
                     );
                 }

@@ -43,11 +43,11 @@ impl CommandExecutionHandler {
 
         tokio::spawn(async move {
             let mut handle = Left(futures::future::pending());
-
             let mut out_lines_stream = Left(futures::stream::pending());
             let mut err_lines_stream = Left(futures::stream::pending());
             let mut out_lines = String::new();
             let mut err_lines = String::new();
+
             loop {
                 tokio::select! {
                     Some(new_cmd) = cmd_in_receive.recv() => {
@@ -59,14 +59,32 @@ impl CommandExecutionHandler {
                             Ok(mut child) =>  {
                                 out_lines_stream = Right(io::BufReader::new(child.stdout.take().unwrap()).lines());
                                 err_lines_stream = Right(io::BufReader::new(child.stderr.take().unwrap()).lines());
+                                out_lines = String::new();
+                                err_lines = String::new();
                                 handle = Right(tokio::time::timeout(cmd_timeout, child));
                             }
                             Err(err) => cmd_out_send.send(CmdOutput::NotOk(err)).await.ok().unwrap(),
                         }
                     }
 
-                    Some(out_line) = out_lines_stream.next() => out_lines.push_str(&(out_line.unwrap() + "\n")),
-                    Some(err_line) = err_lines_stream.next() => err_lines.push_str(&(err_line.unwrap() + "\n")),
+                    Some(line) = out_lines_stream.next() => {
+                        match line {
+                            Ok(line) => out_lines.push_str(&(line + "\n")),
+                            Err(err) => {
+                                cmd_out_send.send(CmdOutput::NotOk(format!("Error: {}", err))).await.ok().unwrap();
+                                handle = Left(futures::future::pending());
+                            }
+                        }
+                    }
+                    Some(line) = err_lines_stream.next() => {
+                        match line {
+                            Ok(line) => err_lines.push_str(&(line + "\n")),
+                            Err(err) => {
+                                cmd_out_send.send(CmdOutput::NotOk(format!("Error: {}", err))).await.ok().unwrap();
+                                handle = Left(futures::future::pending());
+                            }
+                        }
+                    }
 
                     result = &mut handle => {
                         // resulting_output contains the command's output if everything went well,
@@ -75,16 +93,30 @@ impl CommandExecutionHandler {
                             Ok(Ok(result)) => {
                                 if result.success() {
                                     if let Right(stream) = out_lines_stream {
-                                        let pending_lines = stream.map(|x| x.unwrap()).collect::<Vec<String>>().await;
-                                        out_lines.push_str(&pending_lines.join("\n"));
+                                        let results = stream.collect::<Vec<Result<_, _>>>().await.into_iter().collect::<Result<Vec<_>, _>>();
+                                        match results {
+                                            Ok(pending_lines) => {
+                                                out_lines.push_str(&pending_lines.join("\n"));
+                                                CmdOutput::Ok(out_lines)
+                                            }
+                                            Err(err) => CmdOutput::NotOk(format!("{}", err)),
+                                        }
+                                    } else {
+                                        CmdOutput::Ok(out_lines)
                                     }
-                                    CmdOutput::Ok(out_lines)
                                 } else {
                                     if let Right(stream) = err_lines_stream {
-                                        let pending_lines = stream.map(|x| x.unwrap()).collect::<Vec<String>>().await;
-                                        err_lines.push_str(&pending_lines.join("\n"));
+                                        let results = stream.collect::<Vec<Result<_, _>>>().await.into_iter().collect::<Result<Vec<_>, _>>();
+                                        match results {
+                                            Ok(pending_lines) => {
+                                                err_lines.push_str(&pending_lines.join("\n"));
+                                                CmdOutput::NotOk(out_lines)
+                                            }
+                                            Err(err) => CmdOutput::NotOk(format!("{}", err)),
+                                        }
+                                    } else {
+                                        CmdOutput::NotOk(err_lines)
                                     }
-                                    CmdOutput::NotOk(err_lines)
                                 }
                             },
 

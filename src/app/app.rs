@@ -13,6 +13,7 @@ F3         Toggle Paranoid history (fills up history in autoeval)
 F4         Show/hide history
 Ctrl+B     Show/hide bookmarks
 F5         Open helpviewer
+F6         Open outputviewer
 Ctrl+S     Save bookmark
 Alt+Return Newline
 Ctrl+X     Clear Command
