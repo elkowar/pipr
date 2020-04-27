@@ -85,6 +85,7 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result
                     &mut f,
                     exec_chunks[2],
                     app.input_state.content_str() == app.last_executed_cmd,
+                    app.is_processing_state,
                     &app.command_output,
                     &app.command_error,
                 );
@@ -184,13 +185,24 @@ fn draw_input_field<B: Backend>(f: &mut Frame<B>, rect: Rect, app: &App) {
     );
 }
 
-fn draw_outputs<B: Backend>(f: &mut Frame<B>, rect: Rect, changed: bool, stdout: &str, stderr: &str) {
+fn draw_outputs<B: Backend>(
+    f: &mut Frame<B>,
+    rect: Rect,
+    changed: bool,
+    processing_state: Option<u8>,
+    stdout: &str,
+    stderr: &str,
+) {
     let output_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Percentage(if stderr.is_empty() { 100 } else { 50 }), Percentage(100)].as_ref())
         .split(rect);
 
-    let stdout_title = format!("Output{}", if changed { "" } else { " [+]" });
+    let stdout_title = format!(
+        "Output{}{}",
+        if changed { "" } else { " [+]" },
+        display_processing_state(processing_state)
+    );
     // TODO only render the amount of lines that is actually visible, or make it scrollable
     f.render_widget(
         Paragraph::new([Text::raw(stdout)].iter()).block(make_default_block(&stdout_title, false)),
@@ -213,4 +225,16 @@ fn make_default_block(title: &str, selected: bool) -> Block {
     };
 
     Block::default().title(title).borders(Borders::ALL).title_style(title_style)
+}
+
+fn display_processing_state(state: Option<u8>) -> &'static str {
+    match state {
+        Some(0) => " ⠟",
+        Some(1) => " ⠯",
+        Some(2) => " ⠷",
+        Some(3) => " ⠾",
+        Some(4) => " ⠽",
+        Some(5) => " ⠻",
+        _ => "",
+    }
 }

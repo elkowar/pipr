@@ -9,7 +9,10 @@ use std::fs::File;
 use std::io;
 use std::io::Write;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::{
+    process::{Command, Stdio},
+    time::Duration,
+};
 use tokio::stream::StreamExt;
 use tui::{backend::CrosstermBackend, Terminal};
 
@@ -179,6 +182,8 @@ async fn run_app<W: Write>(mut app: &mut App, mut output_stream: W) -> Result<()
 
     let mut all_errors = Vec::new();
     let mut crossterm_event_stream = crossterm::event::EventStream::new();
+    let mut tick_interval = tokio::time::interval(Duration::from_millis(100));
+
     while !app.should_quit {
         let draw_result = ui::draw_app(&mut terminal, &mut app);
         if let Err(err) = draw_result {
@@ -187,6 +192,7 @@ async fn run_app<W: Write>(mut app: &mut App, mut output_stream: W) -> Result<()
 
         tokio::select! {
             Some(cmd_output) = app.execution_handler.cmd_out_receive.recv() => app.on_cmd_output(cmd_output),
+            _ = tick_interval.tick() => app.on_tick(),
             Some(maybe_event) = crossterm_event_stream.next() => match maybe_event {
                 Ok(CEvent::Key(key_evt)) => app.on_tui_event(key_evt.code, key_evt.modifiers).await,
                 Err(_) => break,

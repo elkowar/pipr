@@ -58,6 +58,9 @@ pub struct App {
     pub raw_mode: bool,
     pub autocomplete_state: Option<AutocompleteState>,
 
+    /// number from 0-4 showing an animation that shows some process being executed
+    pub is_processing_state: Option<u8>,
+
     /// A (stdin, command) that should be executed in the main screen.
     /// this will be taken ( and thus reset ) and handled by the ui module.
     pub should_jump_to_other_cmd: Option<(Option<String>, std::process::Command)>,
@@ -81,6 +84,7 @@ impl App {
             autoeval_mode: config.autoeval_mode_default,
             paranoid_history_mode: config.paranoid_history_mode_default,
             should_quit: false,
+            is_processing_state: None,
             history_idx: None,
             opened_key_select_menu: None,
             should_jump_to_other_cmd: None,
@@ -93,6 +97,7 @@ impl App {
     }
 
     pub fn on_cmd_output(&mut self, process_result: CmdOutput) {
+        self.is_processing_state = None;
         match process_result {
             CmdOutput::Ok(stdout) => {
                 if self.paranoid_history_mode {
@@ -122,8 +127,8 @@ impl App {
         } else {
             command.join(" ")
         };
-
         self.execution_handler.execute(&command).await;
+        self.is_processing_state = Some(0);
         self.last_executed_cmd = self.input_state.content_str();
     }
 
@@ -196,5 +201,9 @@ impl App {
                 _ => state.apply_event(code),
             },
         }
+    }
+
+    pub fn on_tick(&mut self) {
+        self.is_processing_state = self.is_processing_state.map(|x| (x + 1) % 6)
     }
 }
