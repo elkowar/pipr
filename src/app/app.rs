@@ -39,6 +39,9 @@ pub enum KeySelectMenuType {
     OpenWordIn(String), // stores the word that should be opened in the selected help
     OpenOutputIn(String),
 }
+
+/// Represents a command together with it's cached output,
+/// used to cache the output of part of the command
 #[derive(Debug)]
 pub struct CachedCommandPart {
     pub command: Vec<String>,
@@ -131,56 +134,61 @@ impl App {
     }
 
     pub async fn execute_content(&mut self) {
-        let command = self.input_state.content_lines();
-        let command = command
+        let command = self
+            .input_state
+            .content_lines()
             .iter()
             .filter(|line| !line.starts_with('#'))
-            .map(|x| x.to_owned())
+            .cloned()
             .collect::<Vec<String>>();
         let command = if self.raw_mode {
             command.join("\n")
         } else {
             command.join(" ")
         };
-        self.execution_handler
-            .execute(CommandExecutionRequest::new(
-                command,
-                self.cached_command_part.as_ref().map(|x| x.cached_output.to_owned()),
-            ))
-            .await;
+
+        let execution_request =
+            CommandExecutionRequest::new(command, self.cached_command_part.as_ref().map(|x| x.cached_output.to_owned()));
+        self.execution_handler.execute(execution_request).await;
         self.is_processing_state = Some(0);
         self.last_executed_cmd = self.input_state.content_str();
+    }
+
+    fn toggle_history_list(&mut self) {
+        match self.window_state {
+            WindowState::HistoryList(_) => self.window_state = WindowState::Main,
+            _ => {
+                self.history.push(self.input_state.content_to_commandentry());
+                let entries = self.history.entries.clone();
+                self.window_state = WindowState::HistoryList(CommandListState::new(entries, self.history_idx));
+            }
+        }
+    }
+
+    fn toggle_bookmark_list(&mut self) {
+        match self.window_state {
+            WindowState::BookmarkList(_) => self.window_state = WindowState::Main,
+            _ => {
+                self.history.push(self.input_state.content_to_commandentry());
+                let entries = self.bookmarks.entries.clone();
+                self.window_state = WindowState::BookmarkList(CommandListState::new(entries, None));
+            }
+        }
+    }
+
+    fn toggle_help_window(&mut self) {
+        match self.window_state {
+            WindowState::TextView(_, _) => self.window_state = WindowState::Main,
+            _ => self.window_state = WindowState::TextView("Help".to_string(), HELP_TEXT.to_string()),
+        }
     }
 
     pub async fn on_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         let control_pressed = modifiers.contains(KeyModifiers::CONTROL);
         match code {
-            KeyCode::F(1) => match self.window_state {
-                WindowState::TextView(_, _) => self.window_state = WindowState::Main,
-                _ => self.window_state = WindowState::TextView("Help".to_string(), HELP_TEXT.to_string()),
-            },
-            KeyCode::Char('b') if control_pressed => match self.window_state {
-                WindowState::BookmarkList(_) => {
-                    self.window_state = WindowState::Main;
-                }
-                _ => {
-                    self.history.push(self.input_state.content_to_commandentry());
-
-                    let entries = self.bookmarks.entries.clone();
-                    self.window_state = WindowState::BookmarkList(CommandListState::new(entries, None));
-                }
-            },
-            KeyCode::F(4) => match self.window_state {
-                WindowState::HistoryList(_) => {
-                    self.window_state = WindowState::Main;
-                }
-                _ => {
-                    self.history.push(self.input_state.content_to_commandentry());
-
-                    let entries = self.history.entries.clone();
-                    self.window_state = WindowState::HistoryList(CommandListState::new(entries, self.history_idx));
-                }
-            },
+            KeyCode::F(1) => self.toggle_help_window(),
+            KeyCode::Char('b') if control_pressed => self.toggle_bookmark_list(),
+            KeyCode::F(4) => self.toggle_history_list(),
             _ => self.handle_window_specific_event(code, modifiers).await,
         }
     }

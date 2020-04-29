@@ -15,6 +15,7 @@ pub enum ExecutionMode {
     ISOLATED,
 }
 
+/// Represents a command that should be executed, and an optional stdin that should be piped into it
 pub struct CommandExecutionRequest {
     pub command: String,
     pub stdin: Option<Vec<String>>,
@@ -23,12 +24,6 @@ pub struct CommandExecutionRequest {
 impl CommandExecutionRequest {
     pub fn new(command: String, stdin: Option<Vec<String>>) -> Self {
         CommandExecutionRequest { command, stdin }
-    }
-    pub fn with_stdin(command: String, stdin: Vec<String>) -> Self {
-        CommandExecutionRequest {
-            command,
-            stdin: Some(stdin),
-        }
     }
 }
 
@@ -47,6 +42,7 @@ pub enum CmdOutput {
 }
 
 impl CommandExecutionHandler {
+    /// start a CommandExecutionHandler thread.
     pub fn start(cmd_timeout: Duration, execution_mode: ExecutionMode, eval_environment: Vec<String>) -> CommandExecutionHandler {
         let (cmd_in_send, mut cmd_in_receive) = mpsc::channel::<CommandExecutionRequest>(10);
         let (mut cmd_out_send, cmd_out_receive) = mpsc::channel::<CmdOutput>(10);
@@ -74,6 +70,8 @@ impl CommandExecutionHandler {
                         let child = execution_mode.run_cmd_tokio(&eval_environment, &new_cmd.command);
                         match child {
                             Ok(mut child) =>  {
+
+                                // this need's improving or at least some more testing
                                 if let Some(stdin_content) = new_cmd.stdin {
                                     let mut stdin = child.stdin.take().unwrap();
                                     tokio::spawn(async move {
@@ -165,16 +163,21 @@ impl CommandExecutionHandler {
         executor
     }
 
+    /// execute a single command, returning it's output in this executors cmd_out channel
     pub async fn execute(&mut self, cmd: CommandExecutionRequest) {
         self.cmd_in_send.send(cmd).await.ok().unwrap();
     }
 
+    /// stop the executor thread
     pub async fn stop(&mut self) {
         self.stop_send.send(()).await.unwrap();
     }
 }
 
 impl ExecutionMode {
+    /// spawn an asynchronously running child using this executionMode, returning Err if something went wrong while spawning.
+    /// the command has stdout, stderr and stdin as `Stdio::piped()`, so all are available.
+    /// The child is also `kill_on_drop`, so it will be killed when the child value is dropped.
     fn run_cmd_tokio(&self, eval_environment: &[String], cmd: &str) -> Result<Child, String> {
         match self {
             ExecutionMode::ISOLATED => Command::new("bwrap")
@@ -206,7 +209,10 @@ impl ExecutionMode {
         }
     }
 
+    /// blockingly run a command using this executionmode, ignoring it's stderr.
+    /// return's the stdout if everything went well, or an error message if there was a problem.
     pub fn run_cmd_blocking(&self, eval_environment: &[String], cmd: &str) -> Result<Vec<String>, String> {
+        // TODO respect stderr, check exit code and clean up
         match self {
             ExecutionMode::ISOLATED => std::process::Command::new("bwrap")
                 .args(BUBBLEWRAP_ARGS.split(' '))

@@ -7,6 +7,7 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use std::path::PathBuf;
 use std::process::Command;
 
+/// a state holder for the autocomplete menu
 #[derive(Debug)]
 pub struct AutocompleteState {
     pub original_prompt: String,
@@ -72,7 +73,7 @@ impl App {
             .iter()
             .take(self.input_state.cursor_line)
             .chain([self.input_state.current_line()[..self.input_state.cursor_col].to_string()].iter())
-            .map(|x| x.to_owned())
+            .cloned()
             .collect::<Vec<String>>();
         let command_result = self
             .execution_handler
@@ -89,31 +90,62 @@ impl App {
         }
     }
 
+    fn open_autocomplete_menu(&mut self) {
+        let current_line = self.input_state.current_line().to_string();
+        let hovered_word = current_line.word_at_idx(self.input_state.cursor_col);
+        let hovered_char = self.input_state.hovered_char();
+        if hovered_char.is_none() || hovered_char == Some(" ") || hovered_char == Some("") {
+            if let Some(hovered_word) = hovered_word {
+                if let Some(completions) = provide_path_autocomplete(hovered_word) {
+                    if completions.len() == 1 {
+                        let completed_value = completions.first().unwrap();
+                        let completed_value = completed_value.trim_start_matches(hovered_word);
+                        self.input_state.insert_at_cursor(completed_value);
+                        self.input_state.cursor_col += completed_value.len();
+                    } else if completions.len() > 1 {
+                        self.autocomplete_state = AutocompleteState::from_options(hovered_word.to_string(), completions);
+                    }
+                }
+            }
+        }
+    }
+
+    fn open_helpviewer(&mut self) {
+        let current_line = self.input_state.current_line();
+        let hovered_word = current_line.word_at_idx(self.input_state.cursor_col);
+        if let Some(word) = hovered_word {
+            let help_viewers = &self.config.help_viewers;
+            let options = help_viewers.iter().map(|(&k, v)| (k, v.resolve(word))).collect();
+            let key_select_menu = KeySelectMenu::new(options, KeySelectMenuType::OpenWordIn(word.into()));
+            self.opened_key_select_menu = Some(key_select_menu);
+        }
+    }
+
+    fn open_outputviewer(&mut self) {
+        let current_output = self.command_output.to_owned();
+        let output_viewers = &self.config.output_viewers;
+        let options = output_viewers.iter().map(|(&k, v)| (k, v.to_owned())).collect();
+        let key_select_menu = KeySelectMenu::new(options, KeySelectMenuType::OpenOutputIn(current_output.into()));
+        self.opened_key_select_menu = Some(key_select_menu);
+    }
+
     pub async fn handle_main_window_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         let control_pressed = modifiers.contains(KeyModifiers::CONTROL);
 
         if let Some(autocomplete_state) = self.autocomplete_state.as_mut() {
             match code {
-                KeyCode::Tab | KeyCode::Down => {
-                    autocomplete_state.cycle_selected();
-                    return;
-                }
-                KeyCode::BackTab | KeyCode::Up => {
-                    autocomplete_state.cycle_selected_backwards();
-                    return;
-                }
+                KeyCode::Tab | KeyCode::Down => autocomplete_state.cycle_selected(),
+                KeyCode::BackTab | KeyCode::Up => autocomplete_state.cycle_selected_backwards(),
                 KeyCode::Enter => {
                     let chosen_completion = autocomplete_state.selected();
                     let completed_value = chosen_completion.trim_start_matches(&autocomplete_state.original_prompt);
                     self.input_state.insert_at_cursor(completed_value);
                     self.input_state.cursor_col += completed_value.len();
                     self.autocomplete_state = None;
-                    return;
                 }
-                _ => {
-                    self.autocomplete_state = None;
-                }
+                _ => self.autocomplete_state = None,
             }
+            return;
         }
 
         if let Some(key_select_menu) = self.opened_key_select_menu.take() {
@@ -128,48 +160,10 @@ impl App {
             KeyCode::Char('q') | KeyCode::Char('c') if control_pressed => self.set_should_quit(),
             KeyCode::F(2) => self.autoeval_mode = !self.autoeval_mode,
             KeyCode::F(3) => self.paranoid_history_mode = !self.paranoid_history_mode,
-
-            KeyCode::Tab => {
-                let current_line = self.input_state.current_line().to_string();
-                let hovered_word = current_line.word_at_idx(self.input_state.cursor_col);
-                let hovered_char = self.input_state.hovered_char();
-                if hovered_char.is_none() || hovered_char == Some(" ") || hovered_char == Some("") {
-                    if let Some(hovered_word) = hovered_word {
-                        if let Some(completions) = provide_path_autocomplete(hovered_word) {
-                            if completions.len() == 1 {
-                                let completed_value = completions.first().unwrap();
-                                let completed_value = completed_value.trim_start_matches(hovered_word);
-                                self.input_state.insert_at_cursor(completed_value);
-                                self.input_state.cursor_col += completed_value.len();
-                            } else if completions.len() > 1 {
-                                self.autocomplete_state = AutocompleteState::from_options(hovered_word.to_string(), completions);
-                            }
-                        }
-                    }
-                }
-            }
-
-            KeyCode::F(5) => {
-                let current_line = self.input_state.current_line();
-                let hovered_word = current_line.word_at_idx(self.input_state.cursor_col);
-                if let Some(word) = hovered_word {
-                    let help_viewers = &self.config.help_viewers;
-                    let options = help_viewers.iter().map(|(&k, v)| (k, v.resolve(word))).collect();
-                    let key_select_menu = KeySelectMenu::new(options, KeySelectMenuType::OpenWordIn(word.into()));
-                    self.opened_key_select_menu = Some(key_select_menu);
-                }
-            }
-            KeyCode::F(6) => {
-                let current_output = self.command_output.to_owned();
-                let output_viewers = &self.config.output_viewers;
-                let options = output_viewers.iter().map(|(&k, v)| (k, v.to_owned())).collect();
-                let key_select_menu = KeySelectMenu::new(options, KeySelectMenuType::OpenOutputIn(current_output.into()));
-                self.opened_key_select_menu = Some(key_select_menu);
-            }
-
-            KeyCode::F(7) => {
-                self.do_cache_command_part();
-            }
+            KeyCode::Tab => self.open_autocomplete_menu(),
+            KeyCode::F(5) => self.open_helpviewer(),
+            KeyCode::F(6) => self.open_outputviewer(),
+            KeyCode::F(7) => self.do_cache_command_part(),
 
             KeyCode::Char('s') if control_pressed => self.bookmarks.toggle_entry(self.input_state.content_to_commandentry()),
             KeyCode::Char('p') if control_pressed => self.apply_history_prev(),
@@ -186,9 +180,7 @@ impl App {
                 ));
             }
             KeyCode::Enter => {
-                if !self.input_state.content_str().is_empty() {
-                    self.history.push(self.input_state.content_to_commandentry());
-                }
+                self.history.push(self.input_state.content_to_commandentry());
                 self.execute_content().await;
             }
 

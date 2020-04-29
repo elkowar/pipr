@@ -33,6 +33,7 @@ impl CommandList {
         }
     }
 
+    /// add a new entry to the list. if `command` is empty or is equal to tis list's last entry, it will not be added.
     pub fn push(&mut self, command: CommandEntry) {
         if !command.as_string().is_empty() && self.entries.last() != Some(&command) {
             self.entries.push(command);
