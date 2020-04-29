@@ -2,6 +2,7 @@ use super::app::*;
 use super::key_select_menu::KeySelectMenu;
 use super::util::*;
 use super::{lineeditor::*, Path, Stdio};
+use crate::CmdOutput;
 use crossterm::event::{KeyCode, KeyModifiers};
 use std::path::PathBuf;
 use std::process::Command;
@@ -61,6 +62,30 @@ impl App {
                     self.should_jump_to_other_cmd = Some((Some(output), command));
                 }
             }
+        }
+    }
+
+    fn do_cache_command_part(&mut self) {
+        let command_to_cache = self
+            .input_state
+            .content_lines()
+            .iter()
+            .take(self.input_state.cursor_line)
+            .chain([self.input_state.current_line()[..self.input_state.cursor_col].to_string()].iter())
+            .map(|x| x.to_owned())
+            .collect::<Vec<String>>();
+        let command_result = self
+            .execution_handler
+            .execution_mode
+            .run_cmd_blocking(&self.execution_handler.eval_environment, &command_to_cache.join(" "));
+
+        match command_result {
+            Ok(output) => {
+                self.input_state
+                    .remove_until(self.input_state.cursor_line, self.input_state.cursor_col);
+                self.cached_command_part = Some(CachedCommandPart::new(command_to_cache, output))
+            }
+            Err(err) => self.on_cmd_output(CmdOutput::NotOk(format!("could not run command to cache: {}", err))),
         }
     }
 
@@ -140,6 +165,10 @@ impl App {
                 let options = output_viewers.iter().map(|(&k, v)| (k, v.to_owned())).collect();
                 let key_select_menu = KeySelectMenu::new(options, KeySelectMenuType::OpenOutputIn(current_output.into()));
                 self.opened_key_select_menu = Some(key_select_menu);
+            }
+
+            KeyCode::F(7) => {
+                self.do_cache_command_part();
             }
 
             KeyCode::Char('s') if control_pressed => self.bookmarks.toggle_entry(self.input_state.content_to_commandentry()),

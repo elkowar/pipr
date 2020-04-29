@@ -64,6 +64,11 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result
                     .direction(Direction::Vertical)
                     .constraints(
                         [
+                            Length(if let Some(cached_command_part) = &app.cached_command_part {
+                                2 + cached_command_part.cached_output.len() as u16
+                            } else {
+                                0
+                            }),
                             Length(2 + app.input_state.content_lines().len() as u16),
                             Length(if let Some(state) = &app.autocomplete_state {
                                 (state.options.len().min(5) + 2) as u16
@@ -85,8 +90,30 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result
                     );
                 }
 
-                input_field_rect = exec_chunks[0];
-                draw_input_field(&mut f, input_field_rect, &app);
+                if let Some(cached_command_part) = &app.cached_command_part {
+                    draw_input_field(
+                        &mut f,
+                        exec_chunks[0],
+                        false,
+                        false,
+                        false,
+                        app.config.highlighting_enabled,
+                        &cached_command_part.command,
+                    );
+                }
+
+                input_field_rect = exec_chunks[1];
+
+                let is_bookmarked = app.bookmarks.entries.contains(&app.input_state.content_to_commandentry());
+                draw_input_field(
+                    &mut f,
+                    input_field_rect,
+                    is_bookmarked,
+                    app.paranoid_history_mode,
+                    app.autoeval_mode,
+                    app.config.highlighting_enabled,
+                    app.input_state.content_lines(),
+                );
 
                 if let Some(autocomplete_state) = &app.autocomplete_state {
                     let mut list_state = ListState::default();
@@ -95,11 +122,11 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result
                     let list_widget = List::new(autocomplete_state.options.iter().map(Text::raw))
                         .highlight_style(Style::default().fg(Color::Black).bg(Color::White))
                         .block(make_default_block("Suggestions", false));
-                    f.render_stateful_widget(list_widget, exec_chunks[1], &mut list_state);
+                    f.render_stateful_widget(list_widget, exec_chunks[2], &mut list_state);
                 }
                 draw_outputs(
                     &mut f,
-                    exec_chunks[2],
+                    exec_chunks[3],
                     app.input_state.content_str() == app.last_executed_cmd,
                     app.is_processing_state,
                     &app.command_output,
@@ -174,14 +201,22 @@ fn draw_command_list<B: Backend>(f: &mut Frame<B>, rect: Rect, always_show_previ
     }
 }
 
-fn draw_input_field<B: Backend>(f: &mut Frame<B>, rect: Rect, app: &App) {
+fn draw_input_field<B: Backend>(
+    f: &mut Frame<B>,
+    rect: Rect,
+    is_bookmarked: bool,
+    paranoid_history_mode: bool,
+    autoeval_mode: bool,
+    highlighting_enabled: bool,
+    lines: &[String],
+) {
     // TODO this is hideously inefficient
     //      also make themes configurable?
     //      also highlight errors if possible?
 
     let mut highlighter = HighlightLines::new(*SH_SYNTAX, &THEME);
 
-    let lines = app.input_state.content_lines().iter().map(|line| {
+    let lines = lines.iter().map(|line| {
         let mut line = line.clone();
         if line.len() > rect.width as usize - 5 {
             line.truncate(rect.width as usize - 5);
@@ -191,7 +226,7 @@ fn draw_input_field<B: Backend>(f: &mut Frame<B>, rect: Rect, app: &App) {
     });
 
     let lines_joined = lines.collect::<Vec<String>>().join("\n");
-    let lines: Vec<Text> = if app.config.highlighting_enabled {
+    let lines: Vec<Text> = if highlighting_enabled {
         LinesWithEndings::from(&lines_joined)
             .flat_map(|line| highlighter.highlight(line, &SYNTAX_SET))
             .map(|(style, part)| Text::Styled(Cow::Borrowed(part), highlight_style_to_tui_style(&style)))
@@ -200,12 +235,11 @@ fn draw_input_field<B: Backend>(f: &mut Frame<B>, rect: Rect, app: &App) {
         vec![Text::raw(lines_joined)]
     };
 
-    let is_bookmarked = app.bookmarks.entries.contains(&app.input_state.content_to_commandentry());
     let input_block_title = format!(
         "Command{}{}{}",
         if is_bookmarked { " [Bookmarked]" } else { "" },
-        if app.autoeval_mode { " [Autoeval]" } else { "" },
-        if app.autoeval_mode && app.paranoid_history_mode {
+        if autoeval_mode { " [Autoeval]" } else { "" },
+        if autoeval_mode && paranoid_history_mode {
             " [Paranoid]"
         } else {
             ""
@@ -275,6 +309,5 @@ fn display_processing_state(state: Option<u8>) -> &'static str {
 
 fn highlight_style_to_tui_style(style: &highlighting::Style) -> Style {
     let fg = style.foreground;
-    Style::default().fg(Color::Rgb(fg.r, fg.g, fg.b))
-    //.bg(Color::Rgb(bg.r, bg.g, bg.b))
+    Style::default().fg(Color::Rgb(fg.r, fg.g, fg.b)).bg(Color::Reset)
 }

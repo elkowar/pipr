@@ -81,6 +81,13 @@ impl EditorState {
         &self.lines
     }
 
+    pub fn remove_until(&mut self, line: usize, col: usize) {
+        self.cursor_line = 0.max(self.cursor_line as isize - line as isize) as usize;
+        self.cursor_col = 0;
+        self.lines.drain(..line);
+        self.lines[0].drain(..col);
+    }
+
     pub fn current_line(&self) -> &str {
         &self.lines[self.cursor_line]
     }

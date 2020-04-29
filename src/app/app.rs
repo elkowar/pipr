@@ -39,6 +39,17 @@ pub enum KeySelectMenuType {
     OpenWordIn(String), // stores the word that should be opened in the selected help
     OpenOutputIn(String),
 }
+#[derive(Debug)]
+pub struct CachedCommandPart {
+    pub command: Vec<String>,
+    pub cached_output: Vec<String>,
+}
+
+impl CachedCommandPart {
+    pub fn new(command: Vec<String>, cached_output: Vec<String>) -> CachedCommandPart {
+        CachedCommandPart { command, cached_output }
+    }
+}
 
 pub struct App {
     pub input_state: EditorState,
@@ -57,6 +68,9 @@ pub struct App {
     pub opened_key_select_menu: Option<KeySelectMenu<KeySelectMenuType>>,
     pub raw_mode: bool,
     pub autocomplete_state: Option<AutocompleteState>,
+
+    /// Part of a command can be cached, so it will not be reevluated on every execution.
+    pub cached_command_part: Option<CachedCommandPart>,
 
     /// number from 0-4 showing an animation that shows some process being executed
     pub is_processing_state: Option<u8>,
@@ -86,6 +100,7 @@ impl App {
             should_quit: false,
             is_processing_state: None,
             history_idx: None,
+            cached_command_part: None,
             opened_key_select_menu: None,
             should_jump_to_other_cmd: None,
             execution_handler,
@@ -127,7 +142,12 @@ impl App {
         } else {
             command.join(" ")
         };
-        self.execution_handler.execute(&command).await;
+        self.execution_handler
+            .execute(CommandExecutionRequest::new(
+                command,
+                self.cached_command_part.as_ref().map(|x| x.cached_output.to_owned()),
+            ))
+            .await;
         self.is_processing_state = Some(0);
         self.last_executed_cmd = self.input_state.content_str();
     }

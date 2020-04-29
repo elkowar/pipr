@@ -1,10 +1,13 @@
 use futures::future::Either::*;
 use futures::stream::StreamExt;
 use std::process::Stdio;
-use std::{str, time::Duration};
+use std::{io::BufRead, str, time::Duration};
 use tokio::io::{self, AsyncBufReadExt};
+use tokio::prelude::*;
 use tokio::process::{Child, Command};
 use tokio::sync::mpsc::{self, Receiver, Sender};
+
+const BUBBLEWRAP_ARGS: &str = "--ro-bind / / --tmpfs /tmp --dev /dev --proc /proc --die-with-parent --share-net --unshare-pid";
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum ExecutionMode {
@@ -12,12 +15,29 @@ pub enum ExecutionMode {
     ISOLATED,
 }
 
+pub struct CommandExecutionRequest {
+    pub command: String,
+    pub stdin: Option<Vec<String>>,
+}
+
+impl CommandExecutionRequest {
+    pub fn new(command: String, stdin: Option<Vec<String>>) -> Self {
+        CommandExecutionRequest { command, stdin }
+    }
+    pub fn with_stdin(command: String, stdin: Vec<String>) -> Self {
+        CommandExecutionRequest {
+            command,
+            stdin: Some(stdin),
+        }
+    }
+}
+
 pub struct CommandExecutionHandler {
     pub execution_mode: ExecutionMode,
     pub eval_environment: Vec<String>,
     pub cmd_timeout: Duration,
     pub cmd_out_receive: Receiver<CmdOutput>,
-    cmd_in_send: Sender<String>,
+    cmd_in_send: Sender<CommandExecutionRequest>,
     stop_send: Sender<()>,
 }
 
@@ -28,7 +48,7 @@ pub enum CmdOutput {
 
 impl CommandExecutionHandler {
     pub fn start(cmd_timeout: Duration, execution_mode: ExecutionMode, eval_environment: Vec<String>) -> CommandExecutionHandler {
-        let (cmd_in_send, mut cmd_in_receive) = mpsc::channel::<String>(10);
+        let (cmd_in_send, mut cmd_in_receive) = mpsc::channel::<CommandExecutionRequest>(10);
         let (mut cmd_out_send, cmd_out_receive) = mpsc::channel::<CmdOutput>(10);
         let (stop_send, mut stop_receive) = mpsc::channel::<()>(10);
 
@@ -51,12 +71,18 @@ impl CommandExecutionHandler {
             loop {
                 tokio::select! {
                     Some(new_cmd) = cmd_in_receive.recv() => {
-                        let child = match execution_mode {
-                            ExecutionMode::UNSAFE => run_cmd_unsafe(&eval_environment, &new_cmd),
-                            ExecutionMode::ISOLATED => run_cmd_isolated(&eval_environment, &new_cmd),
-                        };
+                        let child = execution_mode.run_cmd_tokio(&eval_environment, &new_cmd.command);
                         match child {
                             Ok(mut child) =>  {
+                                if let Some(stdin_content) = new_cmd.stdin {
+                                    let mut stdin = child.stdin.take().unwrap();
+                                    tokio::spawn(async move {
+                                        for line in stdin_content {
+                                            let _ = stdin.write_all(line.as_bytes()).await;
+                                        }
+                                    });
+                                }
+
                                 out_lines_stream = Right(io::BufReader::new(child.stdout.take().unwrap()).lines());
                                 err_lines_stream = Right(io::BufReader::new(child.stderr.take().unwrap()).lines());
                                 out_lines = String::new();
@@ -139,8 +165,8 @@ impl CommandExecutionHandler {
         executor
     }
 
-    pub async fn execute(&mut self, cmd: &str) {
-        self.cmd_in_send.send(cmd.into()).await.unwrap();
+    pub async fn execute(&mut self, cmd: CommandExecutionRequest) {
+        self.cmd_in_send.send(cmd).await.ok().unwrap();
     }
 
     pub async fn stop(&mut self) {
@@ -148,33 +174,66 @@ impl CommandExecutionHandler {
     }
 }
 
-fn run_cmd_isolated(eval_environment: &[String], cmd: &str) -> Result<Child, String> {
-    const BUBBLEWRAP_ARGS: &str =
-        "--ro-bind / / --tmpfs /tmp --dev /dev --proc /proc --die-with-parent --share-net --unshare-pid";
-    Command::new("bwrap")
-        .args(BUBBLEWRAP_ARGS.split(' '))
-        .args(eval_environment.iter())
-        .arg(cmd)
-        .stdout(Stdio::piped())
-        .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|_| "Unable to spawn command".to_string())
-}
+impl ExecutionMode {
+    fn run_cmd_tokio(&self, eval_environment: &[String], cmd: &str) -> Result<Child, String> {
+        match self {
+            ExecutionMode::ISOLATED => Command::new("bwrap")
+                .args(BUBBLEWRAP_ARGS.split(' '))
+                .args(eval_environment.iter())
+                .arg(cmd)
+                .stdout(Stdio::piped())
+                .stdin(Stdio::piped())
+                .stderr(Stdio::piped())
+                .kill_on_drop(true)
+                .spawn()
+                .map_err(|_| "Unable to spawn command".to_string()),
 
-fn run_cmd_unsafe(eval_environment: &[String], cmd: &str) -> Result<Child, String> {
-    if cmd.contains("rm ") || cmd.contains("mv ") || cmd.contains("dd ") {
-        return Err("Will not run this command, it's for your own good. Believe me.".to_string());
+            ExecutionMode::UNSAFE => {
+                if cmd.contains("rm ") || cmd.contains("mv ") || cmd.contains("dd ") {
+                    return Err("Will not run this command, it's for your own good. Believe me.".to_string());
+                }
+                let mut eval_environment = eval_environment.iter();
+                Command::new(eval_environment.next().expect("eval_environment is empty"))
+                    .args(eval_environment)
+                    .arg(cmd)
+                    .stdout(Stdio::piped())
+                    .stdin(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .kill_on_drop(true)
+                    .spawn()
+                    .map_err(|_| "Unable to spawn command".to_string())
+            }
+        }
     }
-    let mut eval_environment = eval_environment.iter();
-    Command::new(eval_environment.next().expect("eval_environment is empty"))
-        .args(eval_environment)
-        .arg(cmd)
-        .stdout(Stdio::piped())
-        .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|_| "Unable to spawn command".to_string())
+
+    pub fn run_cmd_blocking(&self, eval_environment: &[String], cmd: &str) -> Result<Vec<String>, String> {
+        match self {
+            ExecutionMode::ISOLATED => std::process::Command::new("bwrap")
+                .args(BUBBLEWRAP_ARGS.split(' '))
+                .args(eval_environment.iter())
+                .arg(cmd)
+                .stdout(Stdio::piped())
+                .stdin(Stdio::null()) // stdin is unused
+                .stderr(Stdio::null()) // stderr is ignored
+                .spawn()
+                .and_then(|mut child| std::io::BufReader::new(child.stdout.as_mut().unwrap()).lines().collect())
+                .map_err(|err| format!("{}", err)),
+
+            ExecutionMode::UNSAFE => {
+                if cmd.contains("rm ") || cmd.contains("mv ") || cmd.contains("dd ") {
+                    return Err("Will not run this command, it's for your own good. Believe me.".to_string());
+                }
+                let mut eval_environment = eval_environment.iter();
+                std::process::Command::new(eval_environment.next().expect("eval_environment is empty"))
+                    .args(eval_environment)
+                    .arg(cmd)
+                    .stdout(Stdio::piped())
+                    .stdin(Stdio::null()) // stdin is unused
+                    .stderr(Stdio::null()) // stderr is ignored
+                    .spawn()
+                    .and_then(|mut child| std::io::BufReader::new(child.stdout.as_mut().unwrap()).lines().collect())
+                    .map_err(|err| format!("{}", err))
+            }
+        }
+    }
 }
