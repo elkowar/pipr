@@ -1,7 +1,6 @@
 use super::lineeditor::*;
 use super::{
     command_list_window::CommandListState, key_select_menu::KeySelectMenu, main_window::AutocompleteState, pipr_config::*,
-    Itertools,
 };
 use crate::command_evaluation::*;
 use crate::commandlist::CommandList;
@@ -16,6 +15,7 @@ F4         Show/hide history
 Ctrl+B     Show/hide bookmarks
 F5         Open helpviewer
 F6         Open outputviewer
+F7         When the cursor is on a `|` symbol, cache the output of everything before that |
 Ctrl+S     Save bookmark
 Alt+Return Newline
 Ctrl+X     Clear Command
@@ -209,8 +209,8 @@ impl App {
         let window_state = &mut self.window_state;
         match window_state {
             WindowState::Main => self.handle_main_window_tui_event(code, modifiers).await,
-
             WindowState::TextView(_, _) => self.window_state = WindowState::Main,
+
             WindowState::BookmarkList(state) => match code {
                 KeyCode::Esc => {
                     self.bookmarks.entries = state.list.clone();

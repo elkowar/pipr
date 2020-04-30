@@ -33,7 +33,6 @@ impl CommandList {
         }
     }
 
-    /// add a new entry to the list. if `command` is empty or is equal to tis list's last entry, it will not be added.
     pub fn push(&mut self, command: CommandEntry) {
         if !command.as_string().is_empty() && self.entries.last() != Some(&command) {
             self.entries.push(command);
@@ -108,7 +107,7 @@ impl CommandList {
     }
 
     pub fn load_from_file(path: PathBuf, max_size: Option<usize>) -> CommandList {
-        if let Ok(mut file) = File::open(path.clone()) {
+        if let Some(mut file) = File::open(path.clone()).ok() {
             let mut contents = String::new();
             file.read_to_string(&mut contents).ok();
             CommandList::deserialize(Some(path), max_size, &contents)

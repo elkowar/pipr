@@ -184,7 +184,6 @@ impl App {
             KeyCode::Char('x') if control_pressed => {
                 self.history.push(self.input_state.content_to_commandentry());
                 self.input_state.apply_event(EditorEvent::Clear);
-                self.cached_command_part = None;
             }
 
             KeyCode::Char('v') if control_pressed => {
@@ -200,17 +199,20 @@ impl App {
 
             _ => {
                 if let Some(editor_event) = convert_keyevent_to_editorevent(code, modifiers) {
-                    let previous_content = self.input_state.content_str();
+                    let previous_content = self.input_state.content_lines().clone();
                     self.input_state.apply_event(editor_event);
+
+                    let new_content = self.input_state.content_lines();
+
                     if let Some(CachedCommandPart { end_line, end_col, .. }) = self.cached_command_part {
-                        if self.input_state.cursor_line < end_line
-                            || (self.input_state.cursor_line == end_line && self.input_state.cursor_col < end_col)
+                        if previous_content.split_strings_at_offset(end_line, end_col).0
+                            != new_content.split_strings_at_offset(end_line, end_col).0
                         {
                             self.cached_command_part = None;
                         }
                     }
 
-                    if self.autoeval_mode && previous_content != self.input_state.content_str() {
+                    if self.autoeval_mode && previous_content != *new_content {
                         self.execute_content().await;
                     }
                 }
