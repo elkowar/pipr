@@ -219,6 +219,7 @@ impl App {
                 KeyCode::Enter => {
                     if let Some(entry) = state.selected_entry() {
                         self.input_state.load_commandentry(entry);
+                        self.cached_command_part = None;
                     }
                     self.bookmarks.entries = state.list.clone();
                     self.window_state = WindowState::Main;
@@ -233,6 +234,7 @@ impl App {
                 KeyCode::Enter => {
                     if let Some(entry) = state.selected_idx.and_then(|idx| state.list.get(idx)) {
                         self.input_state.load_commandentry(entry);
+                        self.cached_command_part = None;
                     }
                     self.history.entries = state.list.clone();
                     self.history_idx = state.selected_idx;

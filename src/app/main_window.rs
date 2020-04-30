@@ -219,6 +219,7 @@ impl App {
     }
 
     fn apply_history_prev(&mut self) {
+        self.cached_command_part = None;
         if let Some(idx) = self.history_idx {
             if idx > 0 {
                 self.history_idx = Some(idx - 1);
@@ -233,6 +234,7 @@ impl App {
     }
 
     fn apply_history_next(&mut self) {
+        self.cached_command_part = None;
         if let Some(idx) = self.history_idx {
             let new_idx = idx + 1;
             if new_idx < self.history.len() - 1 {
