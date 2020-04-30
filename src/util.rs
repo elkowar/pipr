@@ -1,6 +1,5 @@
-/// returns the word at the given byte index.
 #[cfg(test)]
-mod test {
+mod stringext_test {
     use super::*;
     #[test]
     fn test_word_under_cursor() {
@@ -66,5 +65,74 @@ impl<T: AsRef<str>> StringExt for T {
             char_end += 1;
         }
         line.get(idx..char_end)
+    }
+}
+
+pub trait VecStringExt {
+    fn split_strings_at_offset(&self, line_offset: usize, col_offset: usize) -> (Vec<String>, Vec<String>);
+}
+
+impl VecStringExt for Vec<String> {
+    fn split_strings_at_offset(&self, line_offset: usize, col_offset: usize) -> (Vec<String>, Vec<String>) {
+        // TODO this should be possible without allocations, returning Vec<&str>'s
+        if self.is_empty() {
+            return (Vec::new(), Vec::new());
+        }
+
+        if line_offset == 0 && col_offset == 0 {
+            return (Vec::new(), self.clone());
+        } else if line_offset >= self.len() - 1 && col_offset >= self.last().unwrap().len() {
+            return (self.clone(), Vec::new());
+        }
+        let left_side = self
+            .iter()
+            .take(line_offset)
+            .chain([self[line_offset][..col_offset].to_string()].iter())
+            .cloned()
+            .collect::<Vec<String>>();
+
+        let right_side = [self[line_offset][col_offset..].to_string()]
+            .iter()
+            .chain(self[line_offset + 1..].iter())
+            .cloned()
+            .collect::<Vec<String>>();
+
+        (left_side, right_side)
+    }
+}
+
+#[cfg(test)]
+mod vecstringext_test {
+    use super::*;
+    #[test]
+    fn test_split_at_offset() {
+        {
+            let base_lines = vec!["".into(), "abcd".into(), "abcd".into(), "".into(), "abcd".into()];
+            let (left_side, right_side) = base_lines.split_strings_at_offset(2, 2);
+            assert_eq!(left_side, vec!["", "abcd", "ab"]);
+            assert_eq!(right_side, vec!["cd", "", "abcd"]);
+        }
+        {
+            let base_lines = vec!["abcd".into(), "abcd".into()];
+            let (left_side, right_side) = base_lines.split_strings_at_offset(0, 2);
+            assert_eq!(left_side, vec!["ab"]);
+            assert_eq!(right_side, vec!["cd", "abcd"]);
+        }
+    }
+
+    #[test]
+    fn test_at_bounds() {
+        {
+            let base_lines = vec!["abcd".into(), "abcd".into(), "abcd".into()];
+            let (left_side, right_side) = base_lines.split_strings_at_offset(0, 0);
+            assert_eq!(left_side, Vec::new() as Vec<String>);
+            assert_eq!(right_side, vec!["abcd", "abcd", "abcd"]);
+        }
+        {
+            let base_lines = vec!["abcd".into(), "abcd".into(), "abcd".into()];
+            let (left_side, right_side) = base_lines.split_strings_at_offset(2, 4);
+            assert_eq!(left_side, vec!["abcd", "abcd", "abcd"]);
+            assert_eq!(right_side, Vec::new() as Vec<String>);
+        }
     }
 }

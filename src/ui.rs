@@ -18,6 +18,7 @@ use syntect::easy::HighlightLines;
 use syntect::highlighting::{self, Theme, ThemeSet};
 use syntect::parsing::{SyntaxReference, SyntaxSet};
 use syntect::util::LinesWithEndings;
+use util::VecStringExt;
 
 lazy_static! {
     static ref THEME_SET: ThemeSet = ThemeSet::load_defaults();
@@ -27,7 +28,7 @@ lazy_static! {
     static ref PLAINTEXT_SYNTAX: &'static SyntaxReference = SYNTAX_SET.find_syntax_plain_text();
 }
 
-pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(), failure::Error> {
+pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, mut app: &mut App) -> Result<(), failure::Error> {
     if let Some((stdin_content, mut should_jump_to_other_cmd)) = app.should_jump_to_other_cmd.take() {
         execute!(io::stdout(), LeaveAlternateScreen)?;
         let mut child = should_jump_to_other_cmd.env("MAN_POSIXLY_CORRECT", "1").spawn()?;
@@ -64,11 +65,6 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result
                     .direction(Direction::Vertical)
                     .constraints(
                         [
-                            Length(if let Some(cached_command_part) = &app.cached_command_part {
-                                2 + cached_command_part.cached_output.len() as u16
-                            } else {
-                                0
-                            }),
                             Length(2 + app.input_state.content_lines().len() as u16),
                             Length(if let Some(state) = &app.autocomplete_state {
                                 (state.options.len().min(5) + 2) as u16
@@ -90,30 +86,9 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result
                     );
                 }
 
-                if let Some(cached_command_part) = &app.cached_command_part {
-                    draw_input_field(
-                        &mut f,
-                        exec_chunks[0],
-                        false,
-                        false,
-                        false,
-                        app.config.highlighting_enabled,
-                        &cached_command_part.command,
-                    );
-                }
+                input_field_rect = exec_chunks[0];
 
-                input_field_rect = exec_chunks[1];
-
-                let is_bookmarked = app.bookmarks.entries.contains(&app.input_state.content_to_commandentry());
-                draw_input_field(
-                    &mut f,
-                    input_field_rect,
-                    is_bookmarked,
-                    app.paranoid_history_mode,
-                    app.autoeval_mode,
-                    app.config.highlighting_enabled,
-                    app.input_state.content_lines(),
-                );
+                draw_input_field(&mut f, input_field_rect, &mut app);
 
                 if let Some(autocomplete_state) = &app.autocomplete_state {
                     let mut list_state = ListState::default();
@@ -122,11 +97,11 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result
                     let list_widget = List::new(autocomplete_state.options.iter().map(Text::raw))
                         .highlight_style(Style::default().fg(Color::Black).bg(Color::White))
                         .block(make_default_block("Suggestions", false));
-                    f.render_stateful_widget(list_widget, exec_chunks[2], &mut list_state);
+                    f.render_stateful_widget(list_widget, exec_chunks[1], &mut list_state);
                 }
                 draw_outputs(
                     &mut f,
-                    exec_chunks[3],
+                    exec_chunks[2],
                     app.input_state.content_str() == app.last_executed_cmd,
                     app.is_processing_state,
                     &app.command_output,
@@ -201,45 +176,60 @@ fn draw_command_list<B: Backend>(f: &mut Frame<B>, rect: Rect, always_show_previ
     }
 }
 
-fn draw_input_field<B: Backend>(
-    f: &mut Frame<B>,
-    rect: Rect,
-    is_bookmarked: bool,
-    paranoid_history_mode: bool,
-    autoeval_mode: bool,
-    highlighting_enabled: bool,
-    lines: &[String],
-) {
+fn draw_input_field<B: Backend>(f: &mut Frame<B>, rect: Rect, app: &mut App) {
     // TODO this is hideously inefficient
     //      also make themes configurable?
     //      also highlight errors if possible?
 
     let mut highlighter = HighlightLines::new(*SH_SYNTAX, &THEME);
 
-    let lines = lines.iter().map(|line| {
-        let mut line = line.clone();
-        if line.len() > rect.width as usize - 5 {
-            line.truncate(rect.width as usize - 5);
-            line.push_str("...");
-        }
-        line
-    });
+    let lines = if app.cached_command_part.is_none() {
+        app.input_state
+            .content_lines()
+            .iter()
+            .map(|line| {
+                let mut line = line.clone();
+                if line.len() > rect.width as usize - 5 {
+                    line.truncate(rect.width as usize - 5);
+                    line.push_str("...");
+                }
+                line
+            })
+            .collect::<Vec<String>>()
+    } else {
+        app.input_state.content_lines().clone()
+    };
 
-    let lines_joined = lines.collect::<Vec<String>>().join("\n");
-    let lines: Vec<Text> = if highlighting_enabled {
-        LinesWithEndings::from(&lines_joined)
+    let (cached_part, non_cached_part) = match app.cached_command_part {
+        Some(CachedCommandPart { end_line, end_col, .. }) => lines.split_strings_at_offset(end_line, end_col),
+        _ => (Vec::new(), lines),
+    };
+    let (cached_part, non_cached_part) = (cached_part.join("\n"), non_cached_part.join("\n"));
+
+    let cached_part_styled = vec![Text::styled(
+        Cow::Borrowed(cached_part.as_ref()),
+        Style::default().bg(Color::DarkGray).fg(Color::White),
+    )];
+
+    let mut non_cached_part_styled = if app.config.highlighting_enabled {
+        LinesWithEndings::from(&non_cached_part)
             .flat_map(|line| highlighter.highlight(line, &SYNTAX_SET))
             .map(|(style, part)| Text::Styled(Cow::Borrowed(part), highlight_style_to_tui_style(&style)))
             .collect::<Vec<Text>>()
     } else {
-        vec![Text::raw(lines_joined)]
+        vec![Text::raw(non_cached_part)]
     };
+
+    let mut full_styled = cached_part_styled;
+    full_styled.append(&mut non_cached_part_styled);
+
+    let is_bookmarked = app.bookmarks.entries.contains(&app.input_state.content_to_commandentry());
 
     let input_block_title = format!(
         "Command{}{}{}",
         if is_bookmarked { " [Bookmarked]" } else { "" },
-        if autoeval_mode { " [Autoeval]" } else { "" },
-        if autoeval_mode && paranoid_history_mode {
+        if app.autoeval_mode { " [Autoeval]" } else { "" },
+        if app.autoeval_mode && app.paranoid_history_mode {
             " [Paranoid]"
         } else {
             ""
@@ -247,7 +237,7 @@ fn draw_input_field<B: Backend>(
     );
 
     f.render_widget(
-        Paragraph::new(lines.iter()).block(make_default_block(&input_block_title, true)),
+        Paragraph::new(full_styled.iter()).block(make_default_block(&input_block_title, true)),
         rect,
     );
 }

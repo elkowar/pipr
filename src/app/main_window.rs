@@ -67,26 +67,39 @@ impl App {
     }
 
     fn do_cache_command_part(&mut self) {
-        let command_to_cache = self
+        if self.input_state.hovered_char() != Some("|") {
+            return;
+        }
+        let mut command_to_cache = self
             .input_state
             .content_lines()
-            .iter()
-            .take(self.input_state.cursor_line)
-            .chain([self.input_state.current_line()[..self.input_state.cursor_col].to_string()].iter())
-            .cloned()
-            .collect::<Vec<String>>();
+            .split_strings_at_offset(self.input_state.cursor_line, self.input_state.cursor_col + 1)
+            .0;
+
+        command_to_cache.last_mut().map(|x| x.pop());
+        if command_to_cache.last() == Some(&"".to_owned()) {
+            command_to_cache.pop();
+        }
+
         let command_result = self
             .execution_handler
             .execution_mode
             .run_cmd_blocking(&self.execution_handler.eval_environment, &command_to_cache.join(" "));
 
-        match command_result {
-            Ok(output) => {
-                self.input_state
-                    .remove_until(self.input_state.cursor_line, self.input_state.cursor_col);
-                self.cached_command_part = Some(CachedCommandPart::new(command_to_cache, output))
+        if self.input_state.cursor_col < self.input_state.current_line().len() {
+            match command_result {
+                Ok(output) => {
+                    self.cached_command_part = Some(CachedCommandPart::new(
+                        self.input_state.cursor_line,
+                        self.input_state.cursor_col + 1,
+                        output,
+                    ));
+                }
+                Err(err) => {
+                    self.input_state.cursor_col = self.input_state.prev_char_index();
+                    self.on_cmd_output(CmdOutput::NotOk(format!("could not run command to cache: {}", err)));
+                }
             }
-            Err(err) => self.on_cmd_output(CmdOutput::NotOk(format!("could not run command to cache: {}", err))),
         }
     }
 
@@ -171,6 +184,7 @@ impl App {
             KeyCode::Char('x') if control_pressed => {
                 self.history.push(self.input_state.content_to_commandentry());
                 self.input_state.apply_event(EditorEvent::Clear);
+                self.cached_command_part = None;
             }
 
             KeyCode::Char('v') if control_pressed => {
@@ -188,6 +202,13 @@ impl App {
                 if let Some(editor_event) = convert_keyevent_to_editorevent(code, modifiers) {
                     let previous_content = self.input_state.content_str();
                     self.input_state.apply_event(editor_event);
+                    if let Some(CachedCommandPart { end_line, end_col, .. }) = self.cached_command_part {
+                        if self.input_state.cursor_line < end_line
+                            || (self.input_state.cursor_line == end_line && self.input_state.cursor_col < end_col)
+                        {
+                            self.cached_command_part = None;
+                        }
+                    }
 
                     if self.autoeval_mode && previous_content != self.input_state.content_str() {
                         self.execute_content().await;

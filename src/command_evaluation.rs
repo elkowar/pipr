@@ -222,7 +222,14 @@ impl ExecutionMode {
                 .stdin(Stdio::null()) // stdin is unused
                 .stderr(Stdio::null()) // stderr is ignored
                 .spawn()
-                .and_then(|mut child| std::io::BufReader::new(child.stdout.as_mut().unwrap()).lines().collect())
+                .and_then(|mut child| {
+                    let stdout = std::io::BufReader::new(child.stdout.as_mut().unwrap()).lines().collect();
+                    if child.wait()?.success() {
+                        stdout
+                    } else {
+                        Err(std::io::Error::new(std::io::ErrorKind::Other, "Non-zero exit code"))
+                    }
+                })
                 .map_err(|err| format!("{}", err)),
 
             ExecutionMode::UNSAFE => {
@@ -237,7 +244,14 @@ impl ExecutionMode {
                     .stdin(Stdio::null()) // stdin is unused
                     .stderr(Stdio::null()) // stderr is ignored
                     .spawn()
-                    .and_then(|mut child| std::io::BufReader::new(child.stdout.as_mut().unwrap()).lines().collect())
+                    .and_then(|mut child| {
+                        let stdout = std::io::BufReader::new(child.stdout.as_mut().unwrap()).lines().collect();
+                        if child.wait()?.success() {
+                            stdout
+                        } else {
+                            Err(std::io::Error::new(std::io::ErrorKind::Other, "Non-zero exit code"))
+                        }
+                    })
                     .map_err(|err| format!("{}", err))
             }
         }

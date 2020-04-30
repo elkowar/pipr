@@ -1,9 +1,11 @@
 use super::lineeditor::*;
 use super::{
     command_list_window::CommandListState, key_select_menu::KeySelectMenu, main_window::AutocompleteState, pipr_config::*,
+    Itertools,
 };
 use crate::command_evaluation::*;
 use crate::commandlist::CommandList;
+use crate::util::VecStringExt;
 use crossterm::event::{KeyCode, KeyModifiers};
 
 pub const HELP_TEXT: &str = "\
@@ -40,17 +42,23 @@ pub enum KeySelectMenuType {
     OpenOutputIn(String),
 }
 
-/// Represents a command together with it's cached output,
-/// used to cache the output of part of the command
 #[derive(Debug)]
 pub struct CachedCommandPart {
-    pub command: Vec<String>,
+    /// the line where the cached command part ends (must be within the bounds of the input_state)
+    pub end_line: usize,
+    /// the column where the cached command part ends
+    pub end_col: usize,
+    /// the cached output of the command
     pub cached_output: Vec<String>,
 }
 
 impl CachedCommandPart {
-    pub fn new(command: Vec<String>, cached_output: Vec<String>) -> CachedCommandPart {
-        CachedCommandPart { command, cached_output }
+    pub fn new(end_line: usize, end_col: usize, cached_output: Vec<String>) -> CachedCommandPart {
+        CachedCommandPart {
+            end_line,
+            end_col,
+            cached_output,
+        }
     }
 }
 
@@ -134,9 +142,13 @@ impl App {
     }
 
     pub async fn execute_content(&mut self) {
-        let command = self
-            .input_state
-            .content_lines()
+        let lines = self.input_state.content_lines().clone();
+        let lines = match self.cached_command_part {
+            Some(CachedCommandPart { end_line, end_col, .. }) => lines.split_strings_at_offset(end_line, end_col).1,
+            _ => lines,
+        };
+
+        let command = lines
             .iter()
             .filter(|line| !line.starts_with('#'))
             .cloned()

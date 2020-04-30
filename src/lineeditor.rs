@@ -120,7 +120,7 @@ impl EditorState {
         new_cursor
     }
 
-    fn prev_char_index(&self) -> usize {
+    pub fn prev_char_index(&self) -> usize {
         if self.cursor_col == 0 {
             return 0;
         }
