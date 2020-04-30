@@ -30,7 +30,6 @@ cmdlist_always_show_preview = false
 cmd_timeout_millis = 2000
 
 highlighting_enabled = true
-output_highlighting_enabled = false
 
 eval_environment = [\"bash\", \"-c\"]
 
