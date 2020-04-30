@@ -76,7 +76,7 @@ impl CommandExecutionHandler {
                                     let mut stdin = child.stdin.take().unwrap();
                                     tokio::spawn(async move {
                                         for line in stdin_content {
-                                            let _ = stdin.write_all(line.as_bytes()).await;
+                                            let _ = stdin.write_all(format!("{}\n", line).as_bytes()).await;
                                         }
                                     });
                                 }
