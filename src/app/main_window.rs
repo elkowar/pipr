@@ -47,7 +47,7 @@ impl App {
         match key_select_menu.menu_type {
             KeySelectMenuType::Snippets => {
                 if let Some(snippet) = self.config.snippets.get(&c) {
-                    self.input_state.insert_at_cursor(&snippet.text);
+                    self.input_state.insert_at_cursor(&snippet.text, false);
                     self.input_state.cursor_col += snippet.cursor_offset;
                 }
             }
@@ -108,16 +108,13 @@ impl App {
         let hovered_word = current_line.word_at_idx(self.input_state.cursor_col);
         let hovered_char = self.input_state.hovered_char();
         if hovered_char.is_none() || hovered_char == Some(" ") || hovered_char == Some("") {
-            if let Some(hovered_word) = hovered_word {
-                if let Some(completions) = provide_path_autocomplete(hovered_word) {
-                    if completions.len() == 1 {
-                        let completed_value = completions.first().unwrap();
-                        let completed_value = completed_value.trim_start_matches(hovered_word);
-                        self.input_state.insert_at_cursor(completed_value);
-                        self.input_state.cursor_col += completed_value.len();
-                    } else if completions.len() > 1 {
-                        self.autocomplete_state = AutocompleteState::from_options(hovered_word.to_string(), completions);
-                    }
+            let hovered_word = hovered_word.unwrap_or_default();
+            if let Some(completions) = provide_path_autocomplete(hovered_word) {
+                if completions.len() == 1 {
+                    let completed_value = completions.first().unwrap().trim_start_matches(hovered_word);
+                    self.input_state.insert_at_cursor(completed_value, true);
+                } else if completions.len() > 1 {
+                    self.autocomplete_state = AutocompleteState::from_options(hovered_word.to_string(), completions);
                 }
             }
         }
@@ -150,10 +147,10 @@ impl App {
                 KeyCode::Tab | KeyCode::Down => autocomplete_state.cycle_selected(),
                 KeyCode::BackTab | KeyCode::Up => autocomplete_state.cycle_selected_backwards(),
                 KeyCode::Enter => {
-                    let chosen_completion = autocomplete_state.selected();
-                    let completed_value = chosen_completion.trim_start_matches(&autocomplete_state.original_prompt);
-                    self.input_state.insert_at_cursor(completed_value);
-                    self.input_state.cursor_col += completed_value.len();
+                    let completed_value = autocomplete_state
+                        .selected()
+                        .trim_start_matches(&autocomplete_state.original_prompt);
+                    self.input_state.insert_at_cursor(completed_value, true);
                     self.autocomplete_state = None;
                 }
                 _ => self.autocomplete_state = None,
@@ -183,6 +180,7 @@ impl App {
             KeyCode::Char('n') if control_pressed => self.apply_history_next(),
             KeyCode::Char('x') if control_pressed => {
                 self.history.push(self.input_state.content_to_commandentry());
+                self.history_idx = None;
                 self.input_state.apply_event(EditorEvent::Clear);
             }
 
@@ -200,6 +198,7 @@ impl App {
             _ => {
                 if let Some(editor_event) = convert_keyevent_to_editorevent(code, modifiers) {
                     let previous_content = self.input_state.content_lines().clone();
+                    self.history_idx = None;
                     self.input_state.apply_event(editor_event);
 
                     let new_content = self.input_state.content_lines();
@@ -251,8 +250,17 @@ impl App {
 }
 
 fn provide_path_autocomplete(word: &str) -> Option<Vec<String>> {
-    let mut path = PathBuf::new();
-    path.push(word);
+    let home_dir = dirs::home_dir().unwrap();
+
+    let path = if word.trim().is_empty() {
+        PathBuf::from("./")
+    } else if word.starts_with('~') {
+        let mut dir = home_dir.clone();
+        dir.push(word.trim_start_matches('~').trim_start_matches('/').trim_start_matches('\\'));
+        dir
+    } else {
+        PathBuf::from(word)
+    };
 
     let possible_children: Vec<_> = if let Ok(entries) = path.read_dir() {
         entries.filter_map(|entry| entry.ok()).collect()
@@ -271,7 +279,7 @@ fn provide_path_autocomplete(word: &str) -> Option<Vec<String>> {
 
     let completions = possible_children
         .iter()
-        .map(|entry| entry.path().display().to_string())
+        .map(|entry| entry.path().display().to_string().replace(home_dir.to_str().unwrap(), "~"))
         .collect::<Vec<_>>();
     if completions.is_empty() {
         None

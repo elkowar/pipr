@@ -96,9 +96,14 @@ impl EditorState {
         UnicodeWidthStr::width(&self.current_line()[..self.cursor_col])
     }
 
-    pub fn insert_at_cursor(&mut self, text: &str) {
+    /// insert a given string at the cursor position
+    /// second argument determines if the cursor should be moved to the end of the inserted text or not.
+    pub fn insert_at_cursor(&mut self, text: &str, move_cursor: bool) {
         let cursor_col = self.cursor_col;
         self.current_line_mut().insert_str(cursor_col, &text);
+        if move_cursor {
+            self.cursor_col += text.len()
+        }
     }
 
     pub fn hovered_char(&self) -> Option<&str> {
