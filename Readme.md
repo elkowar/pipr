@@ -115,6 +115,12 @@ Also, configure things like enabling autoeval-mode by default.
 If you accidentally removed something from the config, fear not: 
 pipr can print out it's well-commented default config if you pass it the `--config-reference` flag.
 
+#### Finish_hook
+the finish hook (configured in the config-file) is a command that will be executed after you close pipr, 
+and will get the finished bash command line piped into stdin.
+This can be used to pipe your work into xclip, storing it in your clipboard, 
+thus making it possible to quickly paste it into the terminal.
+
 
 ## Terminal integration
 In the `shell_integration/` folder in this repository you'll find some scripts for different interactive shells.
