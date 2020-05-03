@@ -2,6 +2,8 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::path::PathBuf;
 
+const SERIALIZATION_ENTRY_SEPERATOR: &str = "---";
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct CommandEntry(Vec<String>);
 
@@ -19,9 +21,9 @@ impl CommandEntry {
 
 #[derive(Debug, Clone)]
 pub struct CommandList {
-    pub entries: Vec<CommandEntry>,
-    pub file: Option<PathBuf>,
-    pub max_size: Option<usize>,
+    entries: Vec<CommandEntry>,
+    file: Option<PathBuf>,
+    max_size: Option<usize>,
 }
 
 impl CommandList {
@@ -31,6 +33,15 @@ impl CommandList {
             max_size,
             file,
         }
+    }
+
+    pub fn entries(&self) -> &Vec<CommandEntry> {
+        &self.entries
+    }
+
+    pub fn set_entries(&mut self, entries: Vec<CommandEntry>) {
+        self.entries = entries;
+        self.write_to_file();
     }
 
     pub fn push(&mut self, command: CommandEntry) {
@@ -73,13 +84,14 @@ impl CommandList {
     }
 
     pub fn serialize(&self) -> String {
-        self.as_strings().join("\n---\n")
+        self.as_strings().join(&format!("\n{}\n", SERIALIZATION_ENTRY_SEPERATOR))
     }
+
     pub fn deserialize(path: Option<PathBuf>, max_size: Option<usize>, lines: &str) -> CommandList {
         let mut entries = CommandList::new(path, max_size);
         let mut current_entry = Vec::new();
         for line in lines.lines().filter(|x| !x.is_empty()) {
-            if line == "---" {
+            if line == SERIALIZATION_ENTRY_SEPERATOR {
                 entries.push(CommandEntry::new(current_entry));
                 current_entry = Vec::new();
             } else {

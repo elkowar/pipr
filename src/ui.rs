@@ -223,7 +223,7 @@ fn draw_input_field<B: Backend>(f: &mut Frame<B>, rect: Rect, app: &mut App) {
     let mut full_styled = cached_part_styled;
     full_styled.append(&mut non_cached_part_styled);
 
-    let is_bookmarked = app.bookmarks.entries.contains(&app.input_state.content_to_commandentry());
+    let is_bookmarked = app.bookmarks.entries().contains(&app.input_state.content_to_commandentry());
 
     let input_block_title = format!(
         "Command{}{}{}",

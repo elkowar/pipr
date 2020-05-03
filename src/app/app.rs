@@ -171,7 +171,7 @@ impl App {
             WindowState::HistoryList(_) => self.window_state = WindowState::Main,
             _ => {
                 self.history.push(self.input_state.content_to_commandentry());
-                let entries = self.history.entries.clone();
+                let entries = self.history.entries().clone();
                 self.window_state = WindowState::HistoryList(CommandListState::new(entries, self.history_idx));
             }
         }
@@ -182,7 +182,7 @@ impl App {
             WindowState::BookmarkList(_) => self.window_state = WindowState::Main,
             _ => {
                 self.history.push(self.input_state.content_to_commandentry());
-                let entries = self.bookmarks.entries.clone();
+                let entries = self.bookmarks.entries().clone();
                 self.window_state = WindowState::BookmarkList(CommandListState::new(entries, None));
             }
         }
@@ -213,7 +213,7 @@ impl App {
 
             WindowState::BookmarkList(state) => match code {
                 KeyCode::Esc => {
-                    self.bookmarks.entries = state.list.clone();
+                    self.bookmarks.set_entries(state.list.clone());
                     self.window_state = WindowState::Main;
                 }
                 KeyCode::Enter => {
@@ -221,14 +221,14 @@ impl App {
                         self.input_state.load_commandentry(entry);
                         self.cached_command_part = None;
                     }
-                    self.bookmarks.entries = state.list.clone();
+                    self.bookmarks.set_entries(state.list.clone());
                     self.window_state = WindowState::Main;
                 }
                 _ => state.apply_event(code),
             },
             WindowState::HistoryList(state) => match code {
                 KeyCode::Esc => {
-                    self.history.entries = state.list.clone();
+                    self.history.set_entries(state.list.clone());
                     self.window_state = WindowState::Main;
                 }
                 KeyCode::Enter => {
@@ -236,7 +236,7 @@ impl App {
                         self.input_state.load_commandentry(entry);
                         self.cached_command_part = None;
                     }
-                    self.history.entries = state.list.clone();
+                    self.history.set_entries(state.list.clone());
                     self.history_idx = state.selected_idx;
                     self.window_state = WindowState::Main;
                 }
