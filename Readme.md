@@ -45,6 +45,10 @@ Pipr is available on the AUR, so you can simply install it using your favourite 
 ```sh
 $ yay -S pipr-git
 ```
+or for a binary:
+```sh
+$ yay -S pipr-bin
+```
 
 ### Using Cargo
 If you have a Rust-setup and have `cargo` installed, you can install pipr using cargo:
