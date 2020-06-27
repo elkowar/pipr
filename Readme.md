@@ -68,7 +68,7 @@ You can evaluate a command by pressing enter.
 There is also the **autoeval mode**: Enabled by simply pressing `F2`, this mode runs your command after every keypress.
 
 The textfield works like you would expect, supporting `Ctrl+A`, `Ctrl+E` to jump to the start / end of the line,
-`Ctrl+X` to clear the whole text-field, and `Alt+Enter` to insert a newline.
+`Ctrl+U` to clear the whole text-field, and `Alt+Enter` to insert a newline.
 
 ### History and Bookmarks
 Pipr keeps a history of your commands, through which you can cycle using `Ctrl+P` and `Ctrl+N`. 

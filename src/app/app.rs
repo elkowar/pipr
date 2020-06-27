@@ -18,7 +18,7 @@ F6         Open outputviewer
 F7         When the cursor is on a `|` symbol, cache the output of everything before that |
 Ctrl+S     Save bookmark
 Alt+Return Newline
-Ctrl+X     Clear Command
+Ctrl+U     Clear Command
 Ctrl+P     Previous in history
 Ctrl+N     Next in history
 Ctrl+V     Insert snippet (press corresponding key to choose)
