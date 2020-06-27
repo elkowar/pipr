@@ -259,6 +259,7 @@ fn apply_graphics_mode_to_style(style: &mut Style, modes: &[u32]) {
     }
 
     *style = match modes {
+        [] => Style::default(),
         [1] => style.modifier(Modifier::BOLD),
         [3] => style.modifier(Modifier::ITALIC),
         [4] => style.modifier(Modifier::UNDERLINED),
