@@ -41,4 +41,4 @@ ansi-parser = "0.6"
 
 
 [patch.crates-io]
-ansi-parser = { git = 'https://gitlab.com/Elkowar/ansi-parser' }
+ansi-parser = { git = 'https://gitlab.com/Elkowar/ansi-parser', branch = 'truecolor_escape_support' }

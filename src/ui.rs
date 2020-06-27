@@ -1,6 +1,6 @@
 use crate::app::command_list_window::CommandListState;
 use crate::app::*;
-use ansi_parser::{AnsiParseIterator, AnsiParser};
+use ansi_parser::AnsiParser;
 use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
