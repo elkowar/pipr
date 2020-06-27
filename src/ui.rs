@@ -1,5 +1,6 @@
 use crate::app::command_list_window::CommandListState;
 use crate::app::*;
+use ansi_parser::{AnsiParseIterator, AnsiParser};
 use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
@@ -242,6 +243,39 @@ fn draw_input_field<B: Backend>(f: &mut Frame<B>, rect: Rect, app: &mut App) {
     );
 }
 
+fn apply_graphics_mode_to_style(style: &mut Style, modes: &[u32]) {
+    fn ansi_to_color(n: u32) -> Color {
+        match n {
+            0 => Color::Black,
+            1 => Color::Red,
+            2 => Color::Green,
+            3 => Color::Yellow,
+            4 => Color::Blue,
+            5 => Color::Magenta,
+            6 => Color::Cyan,
+            7 => Color::White,
+            _ => Color::White,
+        }
+    }
+
+    *style = match modes {
+        [1] => style.modifier(Modifier::BOLD),
+        [3] => style.modifier(Modifier::ITALIC),
+        [4] => style.modifier(Modifier::UNDERLINED),
+        [5] => style.modifier(Modifier::SLOW_BLINK),
+        [7] => style.modifier(Modifier::REVERSED),
+        [8] => style.modifier(Modifier::HIDDEN),
+        [9] => style.modifier(Modifier::CROSSED_OUT),
+        [n @ 30..=37] => style.fg(ansi_to_color(n - 30)),
+        [n @ 40..=47] => style.bg(ansi_to_color(n - 40)),
+        [38, 5, n] => style.fg(Color::Indexed(*n as u8)),
+        [48, 5, n] => style.bg(Color::Indexed(*n as u8)),
+        [38, 2, r, g, b] => style.bg(Color::Rgb(*r as u8, *g as u8, *b as u8)),
+        [48, 2, r, g, b] => style.fg(Color::Rgb(*r as u8, *g as u8, *b as u8)),
+        _ => *style,
+    };
+}
+
 fn draw_outputs<B: Backend>(
     f: &mut Frame<B>,
     rect: Rect,
@@ -250,6 +284,16 @@ fn draw_outputs<B: Backend>(
     stdout: &str,
     stderr: &str,
 ) {
+    let mut current_style = Style::default();
+    let text_iter = stdout.ansi_parse().filter_map(|seq| match seq {
+        ansi_parser::Output::TextBlock(text) => Some(Text::Styled(text.into(), current_style.clone())),
+        ansi_parser::Output::Escape(ansi_parser::AnsiSequence::SetGraphicsMode(modes)) => {
+            apply_graphics_mode_to_style(&mut current_style, &modes);
+            None
+        }
+        _ => None,
+    });
+
     let output_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Percentage(if stderr.is_empty() { 100 } else { 50 }), Percentage(100)].as_ref())
@@ -263,7 +307,7 @@ fn draw_outputs<B: Backend>(
 
     // TODO only render the amount of lines that is actually visible, or make it scrollable
     f.render_widget(
-        Paragraph::new([Text::raw(stdout)].iter()).block(make_default_block(&stdout_title, false)),
+        Paragraph::new(text_iter.collect_vec().iter()).block(make_default_block(&stdout_title, false)),
         output_chunks[0],
     );
 

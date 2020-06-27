@@ -37,4 +37,8 @@ futures = "0.3.4"
 syntect = "4.1.0"
 lazy_static = "1.4.0"
 dirs = "2.0"
+ansi-parser = "0.6"
 
+
+[patch.crates-io]
+ansi-parser = { path = "../../tmp/ansi-parser" }
