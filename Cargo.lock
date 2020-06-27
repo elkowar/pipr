@@ -16,6 +16,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ansi-parser"
+version = "0.6.5"
+source = "git+https://gitlab.com/Elkowar/ansi-parser#e6a9acb4b7ad24d6eb8e37debf5b3d92d992c142"
+dependencies = [
+ "nom",
+]
+
+[[package]]
 name = "ansi_term"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -872,6 +880,7 @@ checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 name = "pipr"
 version = "0.0.11"
 dependencies = [
+ "ansi-parser",
  "atty",
  "config",
  "crossterm",
