@@ -270,8 +270,8 @@ fn apply_graphics_mode_to_style(style: &mut Style, modes: &[u32]) {
         [n @ 40..=47] => style.bg(ansi_to_color(n - 40)),
         [38, 5, n] => style.fg(Color::Indexed(*n as u8)),
         [48, 5, n] => style.bg(Color::Indexed(*n as u8)),
-        [38, 2, r, g, b] => style.bg(Color::Rgb(*r as u8, *g as u8, *b as u8)),
-        [48, 2, r, g, b] => style.fg(Color::Rgb(*r as u8, *g as u8, *b as u8)),
+        [38, 2, r, g, b] => style.fg(Color::Rgb(*r as u8, *g as u8, *b as u8)),
+        [48, 2, r, g, b] => style.bg(Color::Rgb(*r as u8, *g as u8, *b as u8)),
         _ => *style,
     };
 }
