@@ -18,6 +18,7 @@ dependencies = [
 [[package]]
 name = "ansi-parser"
 version = "0.6.5"
+source = "git+https://gitlab.com/Elkowar/ansi-parser#e6a9acb4b7ad24d6eb8e37debf5b3d92d992c142"
 dependencies = [
  "nom",
 ]
