@@ -33,6 +33,7 @@ in the `[help_viewers]` section.
 ![showcase](showcase.gif)
 
 ## Installing
+[![Packaging status](https://repology.org/badge/vertical-allrepos/pipr.svg)](https://repology.org/project/pipr/versions)
 
 ### Using the static binary
 If none of the listed installation-options are available to you, 
