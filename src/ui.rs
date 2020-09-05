@@ -244,22 +244,30 @@ fn draw_input_field<B: Backend>(f: &mut Frame<B>, rect: Rect, app: &mut App) {
 }
 
 fn apply_graphics_mode_to_style(style: &mut Style, modes: &[u32]) {
-    fn ansi_to_color(n: u32) -> Color {
-        match n {
-            0 => Color::Black,
-            1 => Color::Red,
-            2 => Color::Green,
-            3 => Color::Yellow,
-            4 => Color::Blue,
-            5 => Color::Magenta,
-            6 => Color::Cyan,
-            7 => Color::White,
+    fn ansi_to_color(bright: bool, n: u32) -> Color {
+        match (bright, n) {
+            (false, 0) => Color::Black,
+            (false, 1) => Color::Red,
+            (false, 2) => Color::Green,
+            (false, 3) => Color::Yellow,
+            (false, 4) => Color::Blue,
+            (false, 5) => Color::Magenta,
+            (false, 6) => Color::Cyan,
+            (false, 7) => Color::Gray,
+            (true, 0) => Color::DarkGray,
+            (true, 1) => Color::LightRed,
+            (true, 2) => Color::LightGreen,
+            (true, 3) => Color::LightYellow,
+            (true, 4) => Color::LightBlue,
+            (true, 5) => Color::LightMagenta,
+            (true, 6) => Color::LightCyan,
+            (true, 7) => Color::White,
             _ => Color::White,
         }
     }
 
     *style = match modes {
-        [] => Style::default(),
+        [] | [0] => Style::default(),
         [1] => style.modifier(Modifier::BOLD),
         [3] => style.modifier(Modifier::ITALIC),
         [4] => style.modifier(Modifier::UNDERLINED),
@@ -267,8 +275,10 @@ fn apply_graphics_mode_to_style(style: &mut Style, modes: &[u32]) {
         [7] => style.modifier(Modifier::REVERSED),
         [8] => style.modifier(Modifier::HIDDEN),
         [9] => style.modifier(Modifier::CROSSED_OUT),
-        [n @ 30..=37] => style.fg(ansi_to_color(n - 30)),
-        [n @ 40..=47] => style.bg(ansi_to_color(n - 40)),
+        [n @ 30..=37] => style.fg(ansi_to_color(false, n - 30)),
+        [n @ 40..=47] => style.bg(ansi_to_color(false, n - 40)),
+        [n @ 90..=97] => style.fg(ansi_to_color(true, n - 90)),
+        [n @ 100..=107] => style.bg(ansi_to_color(true, n - 100)),
         [38, 5, n] => style.fg(Color::Indexed(*n as u8)),
         [48, 5, n] => style.bg(Color::Indexed(*n as u8)),
         [38, 2, r, g, b] => style.fg(Color::Rgb(*r as u8, *g as u8, *b as u8)),
