@@ -250,7 +250,9 @@ impl App {
 }
 
 fn provide_path_autocomplete(word: &str) -> Option<Vec<String>> {
-    let home_dir = dirs::home_dir().unwrap();
+    let home_dir = std::env::var("HOME")
+        .map(|p| Path::new(&p).to_path_buf())
+        .expect("$HOME not set");
 
     let path = if word.trim().is_empty() {
         PathBuf::from("./")

@@ -1,11 +1,11 @@
 [package]
 name = "pipr"
-version = "0.0.12"
+version = "0.0.13"
 authors = ["Leon Kowarschick"]
 edition = "2018"
 license = "MIT"
 publish = true
-repository = "https://gitlab.com/Elkowar/pipr"
+repository = "https://github.com/Elkowar/pipr"
 readme = "Readme.md"
 description = "A commandline-utility to interactively build complex shell pipelines"
 
@@ -17,18 +17,18 @@ exclude = [
 ]
 
 [badges]
-gitlab = { repository = "Elkowar/pipr", branch = "master" }
+github = { repository = "Elkowar/pipr", branch = "master" }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 tui = { version = "0.9", default-features = false, features = ['crossterm'] }
-config = { version = "0.9", features = ['toml'] }
+config = { version = "0.10", features = ['toml'] }
 crossterm = { version = "0.17", features = ['event-stream'] }
 failure = "0.1.6"
 itertools = "0.9"
 unicode-width = "0.1.5"
-which = "3.1.1"
+which = "4.0"
 getopts="0.2"
 maplit = "1.0"
 atty = "0.2"
@@ -36,7 +36,6 @@ tokio = { version = "0.2", features = ["full"] }
 futures = "0.3.4"
 syntect = "4.1.0"
 lazy_static = "1.4.0"
-dirs = "2.0"
 ansi-parser = "0.6"
 
 
