@@ -22,7 +22,7 @@ github = { repository = "Elkowar/pipr", branch = "master" }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tui = { version = "0.9", default-features = false, features = ['crossterm'] }
+tui = { version = "0.10", default-features = false, features = ['crossterm'] }
 config = { version = "0.10", features = ['toml'] }
 crossterm = { version = "0.17", features = ['event-stream'] }
 failure = "0.1.6"

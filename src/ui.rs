@@ -11,8 +11,12 @@ use std::{
 };
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
-use tui::widgets::{Block, Borders, List, ListState, Paragraph, Text};
-use tui::{backend::Backend, Frame, Terminal};
+use tui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
+use tui::{
+    backend::Backend,
+    text::{Span, Spans, Text},
+    Frame, Terminal,
+};
 use Constraint::*;
 
 use syntect::easy::HighlightLines;
@@ -80,11 +84,12 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, mut app: &mut App) -> Re
 
                 if let Some(opened_key_select_menu) = &app.opened_key_select_menu {
                     // TODO render specific title
-                    let options = opened_key_select_menu.option_list_strings();
-                    f.render_widget(
-                        List::new(options.map(Text::raw)).block(make_default_block("Open in", false)),
-                        root_chunks[0],
-                    );
+                    let options = opened_key_select_menu
+                        .option_list_strings()
+                        .map(|opt| ListItem::new(Span::raw(opt)))
+                        .collect_vec();
+
+                    f.render_widget(List::new(options).block(make_default_block("Open in", false)), root_chunks[0]);
                 }
 
                 input_field_rect = exec_chunks[0];
@@ -95,9 +100,15 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, mut app: &mut App) -> Re
                     let mut list_state = ListState::default();
                     list_state.select(Some(autocomplete_state.current_idx));
 
-                    let list_widget = List::new(autocomplete_state.options.iter().map(Text::raw))
-                        .highlight_style(Style::default().fg(Color::Black).bg(Color::White))
-                        .block(make_default_block("Suggestions", false));
+                    let list_widget = List::new(
+                        autocomplete_state
+                            .options
+                            .iter()
+                            .map(|x| ListItem::new(x.as_str()))
+                            .collect_vec(),
+                    )
+                    .highlight_style(Style::default().fg(Color::Black).bg(Color::White))
+                    .block(make_default_block("Suggestions", false));
                     f.render_stateful_widget(list_widget, exec_chunks[1], &mut list_state);
                 }
                 draw_outputs(
@@ -108,10 +119,14 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, mut app: &mut App) -> Re
                     &app.command_output,
                     &app.command_error,
                 );
+
+                let cursor_x = input_field_rect.x + 1 + app.input_state.displayed_cursor_column() as u16;
+                let cursor_y = input_field_rect.y + 1 + app.input_state.cursor_line as u16;
+                f.set_cursor(cursor_x, cursor_y);
             }
             WindowState::TextView(title, text) => {
                 f.render_widget(
-                    Paragraph::new([Text::raw(text)].iter()).block(make_default_block(title, true)),
+                    Paragraph::new(text.as_ref()).block(make_default_block(title, true)),
                     root_rect,
                 );
             }
@@ -126,20 +141,11 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, mut app: &mut App) -> Re
         }
 
         f.render_widget(
-            Paragraph::new([Text::raw("Help: F1")].iter()),
+            Paragraph::new("Help: F1"),
             Rect::new(root_rect.width - 10 as u16, root_rect.height as u16, 10, 1),
         );
     })?;
 
-    match app.window_state {
-        WindowState::Main => {
-            terminal.show_cursor()?;
-            let cursor_x = input_field_rect.x + 1 + app.input_state.displayed_cursor_column() as u16;
-            let cursor_y = input_field_rect.y + 1 + app.input_state.cursor_line as u16;
-            terminal.set_cursor(cursor_x, cursor_y)?;
-        }
-        _ => terminal.hide_cursor()?,
-    }
     Ok(())
 }
 
@@ -151,18 +157,19 @@ fn draw_command_list<B: Backend>(f: &mut Frame<B>, rect: Rect, always_show_previ
         .constraints([Percentage(if show_preview { 60 } else { 100 }), Percentage(100)].as_ref())
         .split(rect);
 
-    let items: Vec<String> = state
+    let items = state
         .list
         .iter()
         .map(|entry| entry.as_string().replace("\n", " ↵ "))
-        .collect();
+        .map(|entry| ListItem::new(Span::raw(entry)))
+        .collect_vec();
 
     let mut list_state = ListState::default();
     list_state.select(state.selected_idx);
 
-    let list_widget = List::new(items.iter().map(Text::raw))
+    let list_widget = List::new(items)
         .block(make_default_block(title, true))
-        .highlight_style(Style::default().modifier(Modifier::ITALIC))
+        .highlight_style(Style::default().add_modifier(Modifier::ITALIC))
         .highlight_symbol(">>");
 
     f.render_stateful_widget(list_widget, chunks[0], &mut list_state);
@@ -170,7 +177,7 @@ fn draw_command_list<B: Backend>(f: &mut Frame<B>, rect: Rect, always_show_previ
     if show_preview {
         if let Some(selected_content) = state.selected_entry() {
             f.render_widget(
-                Paragraph::new([Text::raw(selected_content.as_string())].iter()).block(make_default_block("Preview", false)),
+                Paragraph::new(selected_content.as_string().as_str()).block(make_default_block("Preview", false)),
                 chunks[1],
             );
         }
@@ -207,7 +214,7 @@ fn draw_input_field<B: Backend>(f: &mut Frame<B>, rect: Rect, app: &mut App) {
     };
     let (cached_part, non_cached_part) = (cached_part.join("\n"), non_cached_part.join("\n"));
 
-    let cached_part_styled = vec![Text::styled(
+    let cached_part_styled = vec![Span::styled(
         Cow::Borrowed(cached_part.as_ref()),
         Style::default().bg(Color::DarkGray).fg(Color::White),
     )];
@@ -215,10 +222,10 @@ fn draw_input_field<B: Backend>(f: &mut Frame<B>, rect: Rect, app: &mut App) {
     let mut non_cached_part_styled = if app.config.highlighting_enabled {
         LinesWithEndings::from(&non_cached_part)
             .flat_map(|line| highlighter.highlight(line, &SYNTAX_SET))
-            .map(|(style, part)| Text::Styled(Cow::Borrowed(part), highlight_style_to_tui_style(&style)))
-            .collect::<Vec<Text>>()
+            .map(|(style, part)| Span::styled(Cow::Borrowed(part), highlight_style_to_tui_style(&style)))
+            .collect::<Vec<Span>>()
     } else {
-        vec![Text::raw(non_cached_part)]
+        vec![Span::raw(non_cached_part)]
     };
 
     let mut full_styled = cached_part_styled;
@@ -238,7 +245,7 @@ fn draw_input_field<B: Backend>(f: &mut Frame<B>, rect: Rect, app: &mut App) {
     );
 
     f.render_widget(
-        Paragraph::new(full_styled.iter()).block(make_default_block(&input_block_title, true)),
+        Paragraph::new(Spans::from(full_styled)).block(make_default_block(&input_block_title, true)),
         rect,
     );
 }
@@ -268,13 +275,13 @@ fn apply_graphics_mode_to_style(style: &mut Style, modes: &[u32]) {
 
     *style = match modes {
         [] | [0] => Style::default(),
-        [1] => style.modifier(Modifier::BOLD),
-        [3] => style.modifier(Modifier::ITALIC),
-        [4] => style.modifier(Modifier::UNDERLINED),
-        [5] => style.modifier(Modifier::SLOW_BLINK),
-        [7] => style.modifier(Modifier::REVERSED),
-        [8] => style.modifier(Modifier::HIDDEN),
-        [9] => style.modifier(Modifier::CROSSED_OUT),
+        [1] => style.add_modifier(Modifier::BOLD),
+        [3] => style.add_modifier(Modifier::ITALIC),
+        [4] => style.add_modifier(Modifier::UNDERLINED),
+        [5] => style.add_modifier(Modifier::SLOW_BLINK),
+        [7] => style.add_modifier(Modifier::REVERSED),
+        [8] => style.add_modifier(Modifier::HIDDEN),
+        [9] => style.add_modifier(Modifier::CROSSED_OUT),
         [n @ 30..=37] => style.fg(ansi_to_color(false, n - 30)),
         [n @ 40..=47] => style.bg(ansi_to_color(false, n - 40)),
         [n @ 90..=97] => style.fg(ansi_to_color(true, n - 90)),
@@ -296,13 +303,19 @@ fn draw_outputs<B: Backend>(
     stderr: &str,
 ) {
     let mut current_style = Style::default();
-    let text_iter = stdout.ansi_parse().filter_map(|seq| match seq {
-        ansi_parser::Output::TextBlock(text) => Some(Text::Styled(text.into(), current_style.clone())),
-        ansi_parser::Output::Escape(ansi_parser::AnsiSequence::SetGraphicsMode(modes)) => {
-            apply_graphics_mode_to_style(&mut current_style, &modes);
-            None
-        }
-        _ => None,
+    let text_iter = stdout.lines().map(|line| {
+        let spans = line
+            .ansi_parse()
+            .filter_map(|seq| match seq {
+                ansi_parser::Output::TextBlock(text) => Some(Span::styled(Cow::from(text), current_style.clone())),
+                ansi_parser::Output::Escape(ansi_parser::AnsiSequence::SetGraphicsMode(modes)) => {
+                    apply_graphics_mode_to_style(&mut current_style, &modes);
+                    None
+                }
+                _ => None,
+            })
+            .collect_vec();
+        Spans::from(spans)
     });
 
     let output_chunks = Layout::default()
@@ -318,13 +331,13 @@ fn draw_outputs<B: Backend>(
 
     // TODO only render the amount of lines that is actually visible, or make it scrollable
     f.render_widget(
-        Paragraph::new(text_iter.collect_vec().iter()).block(make_default_block(&stdout_title, false)),
+        Paragraph::new(Text::from(text_iter.collect_vec())).block(make_default_block(&stdout_title, false)),
         output_chunks[0],
     );
 
     if !stderr.is_empty() {
         f.render_widget(
-            Paragraph::new([Text::raw(stderr)].iter()).block(make_default_block("Stderr", false)),
+            Paragraph::new(stderr).block(make_default_block("Stderr", false)),
             output_chunks[1],
         );
     }
@@ -337,7 +350,7 @@ fn make_default_block(title: &str, selected: bool) -> Block {
         Style::default().fg(Color::Cyan).bg(Color::Black)
     };
 
-    Block::default().title(title).borders(Borders::ALL).title_style(title_style)
+    Block::default().title(Span::styled(title, title_style)).borders(Borders::ALL)
 }
 
 fn display_processing_state(state: Option<u8>) -> &'static str {
