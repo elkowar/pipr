@@ -23,7 +23,7 @@ pub const DEFAULT_CONFIG: &str = "
 # Paranoid history mode writes every sucessfully running command into the history in autoeval mode.
 paranoid_history_mode_default = false
 
-autoeval_mode_default = false
+autoeval_mode_default = true
 
 history_size = 500
 cmdlist_always_show_preview = false

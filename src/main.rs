@@ -52,9 +52,11 @@ pub struct CliArgs {
 #[tokio::main]
 async fn main() -> Result<(), failure::Error> {
     let args = handle_cli_arguments();
-
-    pub const CONFIG_DIR_RELATIVE_TO_HOME: &str = ".config/pipr/";
-    let config_path = Path::new(&env::var("HOME").unwrap()).join(CONFIG_DIR_RELATIVE_TO_HOME);
+    let home_path = env::var("HOME").expect("$HOME not set");
+    let config_path = &env::var("XDG_CONFIG_HOME")
+        .map(|dir| Path::new(&dir).to_path_buf())
+        .unwrap_or(Path::new(&home_path).join(".config"))
+        .join("pipr");
 
     let config = PiprConfig::load_from_file(&config_path.join("pipr.toml"));
 
