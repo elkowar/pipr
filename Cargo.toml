@@ -1,6 +1,6 @@
 [package]
 name = "pipr"
-version = "0.0.13"
+version = "0.0.14"
 authors = ["Leon Kowarschick"]
 edition = "2018"
 license = "MIT"
@@ -15,9 +15,6 @@ exclude = [
 "build_docker.sh",
 "showcase.gif",
 ]
-
-[badges]
-github = { repository = "Elkowar/pipr", branch = "master" }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

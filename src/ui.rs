@@ -191,52 +191,37 @@ fn draw_input_field<B: Backend>(f: &mut Frame<B>, rect: Rect, app: &mut App) {
 
     let mut highlighter = HighlightLines::new(*SH_SYNTAX, &THEME);
 
-    let lines = if app.cached_command_part.is_none() {
-        app.input_state
-            .content_lines()
-            .iter()
+    // cut off lines at the input field width, adding ...
+    let lines: Vec<String> = app
+        .input_state
+        .content_lines()
+        .iter()
+        .map(|line| truncate_with_ellipsis(line.clone(), rect.width as usize))
+        .collect_vec();
+
+    let joined_lines = lines.join("\n");
+    let styled_lines = if app.config.highlighting_enabled {
+        LinesWithEndings::from(joined_lines.as_ref())
             .map(|line| {
-                let mut line = line.clone();
-                if line.len() > rect.width as usize - 5 {
-                    line.truncate(rect.width as usize - 5);
-                    line.push_str("...");
-                }
-                line
+                highlighter
+                    .highlight(line, &SYNTAX_SET)
+                    .iter()
+                    .map(|(style, part)| Span::styled(*part, highlight_style_to_tui_style(&style)))
+                    .collect_vec()
             })
-            .collect::<Vec<String>>()
+            .map(Spans::from)
+            .collect_vec()
     } else {
-        app.input_state.content_lines().clone()
+        lines.iter().map(Span::raw).map(Spans::from).collect_vec()
     };
-
-    let (cached_part, non_cached_part) = match app.cached_command_part {
-        Some(CachedCommandPart { end_line, end_col, .. }) => lines.split_strings_at_offset(end_line, end_col),
-        _ => (Vec::new(), lines),
-    };
-    let (cached_part, non_cached_part) = (cached_part.join("\n"), non_cached_part.join("\n"));
-
-    let cached_part_styled = vec![Span::styled(
-        Cow::Borrowed(cached_part.as_ref()),
-        Style::default().bg(Color::DarkGray).fg(Color::White),
-    )];
-
-    let mut non_cached_part_styled = if app.config.highlighting_enabled {
-        LinesWithEndings::from(&non_cached_part)
-            .flat_map(|line| highlighter.highlight(line, &SYNTAX_SET))
-            .map(|(style, part)| Span::styled(Cow::Borrowed(part), highlight_style_to_tui_style(&style)))
-            .collect::<Vec<Span>>()
-    } else {
-        vec![Span::raw(non_cached_part)]
-    };
-
-    let mut full_styled = cached_part_styled;
-    full_styled.append(&mut non_cached_part_styled);
 
     let is_bookmarked = app.bookmarks.entries().contains(&app.input_state.content_to_commandentry());
 
     let input_block_title = format!(
-        "Command{}{}{}",
+        "Command{}{}{}{}",
         if is_bookmarked { " [Bookmarked]" } else { "" },
         if app.autoeval_mode { " [Autoeval]" } else { "" },
+        if app.cached_command_part.is_some() { " [Caching]" } else { "" },
         if app.autoeval_mode && app.paranoid_history_mode {
             " [Paranoid]"
         } else {
@@ -245,9 +230,17 @@ fn draw_input_field<B: Backend>(f: &mut Frame<B>, rect: Rect, app: &mut App) {
     );
 
     f.render_widget(
-        Paragraph::new(Spans::from(full_styled)).block(make_default_block(&input_block_title, true)),
+        Paragraph::new(Text::from(styled_lines)).block(make_default_block(&input_block_title, true)),
         rect,
     );
+}
+
+fn truncate_with_ellipsis(mut line: String, length: usize) -> String {
+    if line.len() > length - 5 {
+        line.truncate(length - 5);
+        line.push_str("...");
+    }
+    line
 }
 
 fn apply_graphics_mode_to_style(style: &mut Style, modes: &[u32]) {
