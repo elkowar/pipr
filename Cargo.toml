@@ -1,6 +1,6 @@
 [package]
 name = "pipr"
-version = "0.0.14"
+version = "0.0.15"
 authors = ["Leon Kowarschick"]
 edition = "2018"
 license = "MIT"
@@ -35,6 +35,3 @@ syntect = "4.1.0"
 lazy_static = "1.4.0"
 ansi-parser = "0.6"
 
-
-[patch.crates-io]
-ansi-parser = { git = 'https://gitlab.com/Elkowar/ansi-parser', branch = 'truecolor_escape_support' }
