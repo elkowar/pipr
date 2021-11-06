@@ -23,7 +23,6 @@ use syntect::easy::HighlightLines;
 use syntect::highlighting::{self, Theme, ThemeSet};
 use syntect::parsing::{SyntaxReference, SyntaxSet};
 use syntect::util::LinesWithEndings;
-use util::VecStringExt;
 
 lazy_static! {
     static ref THEME_SET: ThemeSet = ThemeSet::load_defaults();
@@ -243,7 +242,7 @@ fn truncate_with_ellipsis(mut line: String, length: usize) -> String {
     line
 }
 
-fn apply_graphics_mode_to_style(style: &mut Style, modes: &[u32]) {
+fn apply_graphics_mode_to_style(style: &mut Style, modes: &[u8]) {
     fn ansi_to_color(bright: bool, n: u32) -> Color {
         match (bright, n) {
             (false, 0) => Color::Black,
@@ -275,10 +274,10 @@ fn apply_graphics_mode_to_style(style: &mut Style, modes: &[u32]) {
         [7] => style.add_modifier(Modifier::REVERSED),
         [8] => style.add_modifier(Modifier::HIDDEN),
         [9] => style.add_modifier(Modifier::CROSSED_OUT),
-        [n @ 30..=37] => style.fg(ansi_to_color(false, n - 30)),
-        [n @ 40..=47] => style.bg(ansi_to_color(false, n - 40)),
-        [n @ 90..=97] => style.fg(ansi_to_color(true, n - 90)),
-        [n @ 100..=107] => style.bg(ansi_to_color(true, n - 100)),
+        [n @ 30..=37] => style.fg(ansi_to_color(false, (n - 30).into())),
+        [n @ 40..=47] => style.bg(ansi_to_color(false, (n - 40).into())),
+        [n @ 90..=97] => style.fg(ansi_to_color(true, (n - 90).into())),
+        [n @ 100..=107] => style.bg(ansi_to_color(true, (n - 100).into())),
         [38, 5, n] => style.fg(Color::Indexed(*n as u8)),
         [48, 5, n] => style.bg(Color::Indexed(*n as u8)),
         [38, 2, r, g, b] => style.fg(Color::Rgb(*r as u8, *g as u8, *b as u8)),
