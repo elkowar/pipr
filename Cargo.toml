@@ -20,10 +20,10 @@ exclude = [
 
 [dependencies]
 tui = { version = "0.10", default-features = false, features = ['crossterm'] }
-config = { version = "0.10", features = ['toml'] }
-crossterm = { version = "0.17", features = ['event-stream'] }
+config = { version = "0.11", features = ['toml'] }
+crossterm = { version = "0.22", features = ['event-stream'] }
 failure = "0.1.6"
-itertools = "0.9"
+itertools = "0.10"
 unicode-width = "0.1.5"
 which = "4.0"
 getopts="0.2"
@@ -33,5 +33,5 @@ tokio = { version = "0.2", features = ["full"] }
 futures = "0.3.4"
 syntect = "4.1.0"
 lazy_static = "1.4.0"
-ansi-parser = "0.6"
+ansi-parser = "0.8"
 
