@@ -23,7 +23,6 @@ use syntect::easy::HighlightLines;
 use syntect::highlighting::{self, Theme, ThemeSet};
 use syntect::parsing::{SyntaxReference, SyntaxSet};
 use syntect::util::LinesWithEndings;
-use util::VecStringExt;
 
 lazy_static! {
     static ref THEME_SET: ThemeSet = ThemeSet::load_defaults();
