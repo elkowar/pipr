@@ -190,7 +190,7 @@ impl App {
                     KeySelectMenuType::Snippets,
                 ));
             }
-            KeyCode::Enter => {
+            KeyCode::Enter if !modifiers.contains(KeyModifiers::ALT) => {
                 self.history.push(self.input_state.content_to_commandentry());
                 self.execute_content().await;
             }
