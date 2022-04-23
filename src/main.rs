@@ -123,7 +123,13 @@ fn handle_cli_arguments() -> CliArgs {
     );
     opts.optflag("h", "help", "print this help menu");
 
-    let matches = opts.parse(&cli_args[1..]).unwrap();
+    let matches = match opts.parse(&cli_args[1..]) {
+        Ok(m) => { m }
+        Err(e) => {
+            eprintln!("{}: {}", program, e.to_string());
+            std::process::exit(1);
+        }
+    };
 
     if matches.opt_present("help") {
         let brief = format!("Usage: {} [options]", program);
