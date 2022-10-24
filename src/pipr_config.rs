@@ -4,6 +4,8 @@ use std::io::prelude::*;
 use std::{path::PathBuf, time::Duration};
 
 use super::snippets::*;
+use maplit::hashmap;
+
 use crate::command_template::CommandTemplate;
 
 pub const DEFAULT_CONFIG: &str = "

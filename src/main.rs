@@ -1,20 +1,13 @@
-#[macro_use]
-extern crate lazy_static;
-#[macro_use]
-extern crate maplit;
-extern crate getopts;
 use atty::Stream;
 use getopts::Options;
 use itertools::Itertools;
 use std::env;
 use std::fs::File;
-use std::io;
-use std::io::Write;
+use std::io::{self, Read, Write};
 use std::path::Path;
-use std::{
-    process::{Command, Stdio},
-    time::Duration,
-};
+use std::process::{Command, Stdio};
+use std::time::Duration;
+
 use tokio::stream::StreamExt;
 use tui::{backend::CrosstermBackend, Terminal};
 
@@ -24,22 +17,20 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 
-pub mod app;
-pub mod command_evaluation;
-pub mod command_template;
-pub mod commandlist;
-pub mod lineeditor;
-pub mod pipr_config;
-pub mod snippets;
-pub mod ui;
-pub mod util;
+mod app;
+mod command_evaluation;
+mod command_template;
+mod commandlist;
+mod lineeditor;
+mod pipr_config;
+mod snippets;
+mod ui;
+mod util;
 
-pub use app::app::*;
-pub use command_evaluation::*;
-pub use commandlist::CommandList;
-use io::Read;
-pub use lineeditor as le;
-pub use pipr_config::*;
+use app::app::App;
+use command_evaluation::*;
+use commandlist::CommandList;
+use pipr_config::*;
 
 pub struct CliArgs {
     default_content: Option<String>,
@@ -176,6 +167,7 @@ fn after_finish(app: &App, out_file: Option<String>) -> Result<(), failure::Erro
     Ok(())
 }
 
+/// TODO: "Pretty descriptive of a name, I argue" - El Kowar 2022 in Discord:TM: vc
 async fn run_app<W: Write>(mut app: &mut App, mut output_stream: W) -> Result<(), failure::Error> {
     execute!(output_stream, EnterAlternateScreen)?;
     enable_raw_mode()?;
