@@ -1,4 +1,3 @@
-pub use crate::*;
 extern crate crossterm;
 
 pub mod app;

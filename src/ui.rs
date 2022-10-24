@@ -1,5 +1,6 @@
 use crate::app::command_list_window::CommandListState;
-use crate::app::*;
+use crate::app::app::{App, WindowState};
+
 use ansi_parser::AnsiParser;
 use crossterm::{
     execute,
@@ -23,6 +24,9 @@ use syntect::easy::HighlightLines;
 use syntect::highlighting::{self, Theme, ThemeSet};
 use syntect::parsing::{SyntaxReference, SyntaxSet};
 use syntect::util::LinesWithEndings;
+
+use itertools::Itertools;
+use lazy_static::lazy_static;
 
 lazy_static! {
     static ref THEME_SET: ThemeSet = ThemeSet::load_defaults();
@@ -86,7 +90,7 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, mut app: &mut App) -> Re
                     let options = opened_key_select_menu
                         .option_list_strings()
                         .map(|opt| ListItem::new(Span::raw(opt)))
-                        .collect_vec();
+                        .collect::<Vec<_>>();
 
                     f.render_widget(List::new(options).block(make_default_block("Open in", false)), root_chunks[0]);
                 }
@@ -104,7 +108,7 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, mut app: &mut App) -> Re
                             .options
                             .iter()
                             .map(|x| ListItem::new(x.as_str()))
-                            .collect_vec(),
+                            .collect::<Vec<_>>(),
                     )
                     .highlight_style(Style::default().fg(Color::Black).bg(Color::White))
                     .block(make_default_block("Suggestions", false));
@@ -161,7 +165,7 @@ fn draw_command_list<B: Backend>(f: &mut Frame<B>, rect: Rect, always_show_previ
         .iter()
         .map(|entry| entry.as_string().replace("\n", " ↵ "))
         .map(|entry| ListItem::new(Span::raw(entry)))
-        .collect_vec();
+        .collect::<Vec<_>>();
 
     let mut list_state = ListState::default();
     list_state.select(state.selected_idx);
