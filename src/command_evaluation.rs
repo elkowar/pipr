@@ -112,7 +112,7 @@ impl CommandExecutionHandler {
 
                     result = &mut handle => {
                         // resulting_output contains the command's output if everything went well,
-                        // stderr if it exited non-zero, and if any other error occured information about that.
+                        // stderr if it exited non-zero, and if any other error occurred information about that.
                         let resulting_output = match result {
                             Ok(Ok(result)) => {
                                 if result.success() {
