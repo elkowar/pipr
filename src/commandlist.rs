@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::path::PathBuf;
 
-const SERIALIZATION_ENTRY_SEPERATOR: &str = "---";
+const SERIALIZATION_ENTRY_SEPARATOR: &str = "---";
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct CommandEntry(Vec<String>);
@@ -84,14 +84,14 @@ impl CommandList {
     }
 
     pub fn serialize(&self) -> String {
-        self.as_strings().join(&format!("\n{}\n", SERIALIZATION_ENTRY_SEPERATOR))
+        self.as_strings().join(&format!("\n{}\n", SERIALIZATION_ENTRY_SEPARATOR))
     }
 
     pub fn deserialize(path: Option<PathBuf>, max_size: Option<usize>, lines: &str) -> CommandList {
         let mut entries = CommandList::new(path, max_size);
         let mut current_entry = Vec::new();
         for line in lines.lines().filter(|x| !x.is_empty()) {
-            if line == SERIALIZATION_ENTRY_SEPERATOR {
+            if line == SERIALIZATION_ENTRY_SEPARATOR {
                 entries.push(CommandEntry::new(current_entry));
                 current_entry = Vec::new();
             } else {

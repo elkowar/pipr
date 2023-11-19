@@ -22,7 +22,7 @@ pub const DEFAULT_CONFIG: &str = "
 # finish_hook: Executed once you close pipr, getting the command you constructed piped into stdin.
 # finish_hook = \"xclip -selection clipboard -in\"
 
-# Paranoid history mode writes every sucessfully running command into the history in autoeval mode.
+# Paranoid history mode writes every successfully running command into the history in autoeval mode.
 paranoid_history_mode_default = false
 
 autoeval_mode_default = true
