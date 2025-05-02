@@ -205,8 +205,10 @@ fn draw_input_field(f: &mut Frame, rect: Rect, app: &mut App) {
     let styled_lines = if app.config.highlighting_enabled {
         LinesWithEndings::from(joined_lines.as_ref())
             .map(|line| {
-                highlighter
-                    .highlight(line, &SYNTAX_SET)
+                let Ok(result) = highlighter.highlight_line(line, &SYNTAX_SET) else {
+                    return vec![Span::raw(line)];
+                };
+                result
                     .iter()
                     .map(|(style, part)| Span::styled(*part, highlight_style_to_ratatui_style(&style)))
                     .collect_vec()
