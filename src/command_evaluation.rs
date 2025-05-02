@@ -30,7 +30,6 @@ impl CommandExecutionRequest {
 pub struct CommandExecutionHandler {
     pub execution_mode: ExecutionMode,
     pub eval_environment: Vec<String>,
-    pub cmd_timeout: Duration,
     pub cmd_out_receive: Receiver<CmdOutput>,
     cmd_in_send: Sender<CommandExecutionRequest>,
     stop_send: Sender<()>,
@@ -50,7 +49,6 @@ impl CommandExecutionHandler {
 
         let executor = CommandExecutionHandler {
             eval_environment: eval_environment.clone(),
-            cmd_timeout,
             execution_mode,
             cmd_in_send,
             cmd_out_receive,

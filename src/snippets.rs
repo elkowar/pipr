@@ -6,6 +6,7 @@ pub struct Snippet {
 }
 
 impl Snippet {
+    #[cfg(test)]
     pub fn new(text: String, cursor_offset: usize) -> Snippet {
         Snippet { text, cursor_offset }
     }
@@ -17,6 +18,7 @@ impl Snippet {
         }
     }
 
+    #[cfg(test)]
     pub fn without_pipe(&self) -> &str {
         self.text.trim().trim_start_matches('|').trim()
     }

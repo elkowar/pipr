@@ -64,9 +64,6 @@ impl CommandList {
     pub fn len(&self) -> usize {
         self.entries.len()
     }
-    pub fn remove_at(&mut self, idx: usize) {
-        self.entries.remove(idx);
-    }
     pub fn remove_entry(&mut self, entry: &CommandEntry) {
         if let Some(idx) = self.entries.iter().position(|e| e == entry) {
             self.entries.remove(idx);
