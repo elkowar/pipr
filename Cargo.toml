@@ -28,5 +28,5 @@ atty = "0.2"
 crossbeam-channel = "0.5"
 syntect = "4.1.0"
 lazy_static = "1.4.0"
-ansi-parser = "0.8"
+ansi-to-tui = "7.0.0"
 ratatui = { version = "0.29.0", features = ["all-widgets"] }

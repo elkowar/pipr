@@ -1,7 +1,7 @@
 use crate::app::command_list_window::CommandListState;
 use crate::app::{App, WindowState};
 
-use ansi_parser::AnsiParser;
+use ansi_to_tui::IntoText;
 use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
@@ -14,10 +14,7 @@ use ratatui::{
     text::{Line, Span, Text},
     Frame, Terminal,
 };
-use std::{
-    borrow::Cow,
-    io::{self, Write},
-};
+use std::io::{self, Write};
 use Constraint::*;
 
 use syntect::easy::HighlightLines;
@@ -248,66 +245,8 @@ fn truncate_with_ellipsis(mut line: String, length: usize) -> String {
     line
 }
 
-fn apply_graphics_mode_to_style(style: &mut Style, modes: &[u8]) {
-    fn ansi_to_color(bright: bool, n: u32) -> Color {
-        match (bright, n) {
-            (false, 0) => Color::Black,
-            (false, 1) => Color::Red,
-            (false, 2) => Color::Green,
-            (false, 3) => Color::Yellow,
-            (false, 4) => Color::Blue,
-            (false, 5) => Color::Magenta,
-            (false, 6) => Color::Cyan,
-            (false, 7) => Color::Gray,
-            (true, 0) => Color::DarkGray,
-            (true, 1) => Color::LightRed,
-            (true, 2) => Color::LightGreen,
-            (true, 3) => Color::LightYellow,
-            (true, 4) => Color::LightBlue,
-            (true, 5) => Color::LightMagenta,
-            (true, 6) => Color::LightCyan,
-            (true, 7) => Color::White,
-            _ => Color::White,
-        }
-    }
-
-    *style = match modes {
-        [] | [0] => Style::default(),
-        [1] => style.add_modifier(Modifier::BOLD),
-        [3] => style.add_modifier(Modifier::ITALIC),
-        [4] => style.add_modifier(Modifier::UNDERLINED),
-        [5] => style.add_modifier(Modifier::SLOW_BLINK),
-        [7] => style.add_modifier(Modifier::REVERSED),
-        [8] => style.add_modifier(Modifier::HIDDEN),
-        [9] => style.add_modifier(Modifier::CROSSED_OUT),
-        [n @ 30..=37] => style.fg(ansi_to_color(false, (n - 30).into())),
-        [n @ 40..=47] => style.bg(ansi_to_color(false, (n - 40).into())),
-        [n @ 90..=97] => style.fg(ansi_to_color(true, (n - 90).into())),
-        [n @ 100..=107] => style.bg(ansi_to_color(true, (n - 100).into())),
-        [38, 5, n] => style.fg(Color::Indexed(*n as u8)),
-        [48, 5, n] => style.bg(Color::Indexed(*n as u8)),
-        [38, 2, r, g, b] => style.fg(Color::Rgb(*r as u8, *g as u8, *b as u8)),
-        [48, 2, r, g, b] => style.bg(Color::Rgb(*r as u8, *g as u8, *b as u8)),
-        _ => *style,
-    };
-}
-
 fn draw_outputs(f: &mut Frame, rect: Rect, changed: bool, processing_state: Option<u8>, stdout: &str, stderr: &str) {
-    let mut current_style = Style::default();
-    let text_iter = stdout.lines().map(|line| {
-        let spans = line
-            .ansi_parse()
-            .filter_map(|seq| match seq {
-                ansi_parser::Output::TextBlock(text) => Some(Span::styled(Cow::from(text), current_style.clone())),
-                ansi_parser::Output::Escape(ansi_parser::AnsiSequence::SetGraphicsMode(modes)) => {
-                    apply_graphics_mode_to_style(&mut current_style, &modes);
-                    None
-                }
-                _ => None,
-            })
-            .collect_vec();
-        Line::from(spans)
-    });
+    let text = stdout.into_text().unwrap_or_else(|_| Text::raw(stdout));
 
     let output_chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -322,13 +261,14 @@ fn draw_outputs(f: &mut Frame, rect: Rect, changed: bool, processing_state: Opti
 
     // TODO only render the amount of lines that is actually visible, or make it scrollable
     f.render_widget(
-        Paragraph::new(Text::from(text_iter.collect_vec())).block(make_default_block(&stdout_title, false)),
+        Paragraph::new(text).block(make_default_block(&stdout_title, false)),
         output_chunks[0],
     );
 
     if !stderr.is_empty() {
+        let stderr_text = stderr.into_text().unwrap_or_else(|_| Text::raw(stderr));
         f.render_widget(
-            Paragraph::new(stderr).block(make_default_block("Stderr", false)),
+            Paragraph::new(stderr_text).block(make_default_block("Stderr", false)),
             output_chunks[1],
         );
     }
