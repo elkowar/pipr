@@ -69,15 +69,18 @@ impl PiprConfig {
         if !path.exists() {
             create_default_file(&path);
         }
-        let mut settings = config::Config::default();
-        let config_file = config::File::new(path.to_str().unwrap(), config::FileFormat::Toml);
-        settings.merge(config_file).unwrap();
+
+        let settings = config::Config::builder()
+            .add_source(config::File::new(path.to_str().unwrap(), config::FileFormat::Toml))
+            .build()
+            .unwrap();
+
         PiprConfig::from_settings(settings)
     }
 
     fn from_settings(settings: config::Config) -> PiprConfig {
         let snippets = settings
-            .get::<HashMap<char, String>>("snippets")
+            .get::<HashMap<_, String>>("snippets")
             .unwrap_or_default()
             .iter()
             .map(|(&k, v)| (k, Snippet::parse(v)))
@@ -94,18 +97,19 @@ impl PiprConfig {
             .collect::<HashMap<_, _>>();
 
         PiprConfig {
-            finish_hook: settings.get::<String>("finish_hook").ok(),
-            paranoid_history_mode_default: settings.get::<bool>("paranoid_history_mode_default").unwrap_or(false),
-            autoeval_mode_default: settings.get::<bool>("autoeval_mode_default").unwrap_or(false),
-            cmd_timeout: Duration::from_millis(settings.get::<u64>("cmd_timeout_millis").unwrap_or(2000)),
+            finish_hook: settings.get_string("finish_hook").ok(),
+            paranoid_history_mode_default: settings.get_bool("paranoid_history_mode_default").unwrap_or(false),
+            autoeval_mode_default: settings.get_bool("autoeval_mode_default").unwrap_or(false),
+            cmd_timeout: Duration::from_millis(settings.get_int("cmd_timeout_millis").unwrap_or(2000) as u64),
             eval_environment: settings
-                .get::<Vec<String>>("eval_environment")
+                .get_array("eval_environment")
+                .map(|arr| arr.iter().filter_map(|v| v.clone().into_string().ok()).collect())
                 .unwrap_or_else(|_| vec!["bash".into(), "-c".into()]),
-            history_size: settings.get::<usize>("history_size").unwrap_or(500),
-            cmdlist_always_show_preview: settings.get::<bool>("cmdlist_always_show_preview").unwrap_or(false),
-            highlighting_enabled: settings.get::<bool>("highlighting_enabled").unwrap_or(true),
+            history_size: settings.get_int("history_size").unwrap_or(500) as usize,
+            cmdlist_always_show_preview: settings.get_bool("cmdlist_always_show_preview").unwrap_or(false),
+            highlighting_enabled: settings.get_bool("highlighting_enabled").unwrap_or(true),
             output_viewers: settings
-                .get::<HashMap<char, String>>("output_viewers")
+                .get("output_viewers")
                 .unwrap_or_else(|_| hashmap! { 'l' => "less".into() }),
             help_viewers,
             snippets,

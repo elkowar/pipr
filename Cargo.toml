@@ -16,17 +16,17 @@ exclude = ["build_docker.sh", "showcase.gif"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-config = { version = "0.11", features = ['toml'] }
-crossterm = "0.28.1"
+config = { version = "0.15.11", features = ['toml'] }
+crossterm = "0.29.0"
 anyhow = "1.0"
-itertools = "0.10"
-unicode-width = "0.1.5"
-which = "4.0"
+itertools = "0.14"
+unicode-width = "0.1.14"
+which = "4.4.2"
 getopts = "0.2"
 maplit = "1.0"
 atty = "0.2"
 crossbeam-channel = "0.5"
-syntect = "4.1.0"
+syntect = "4.6.0"
 lazy_static = "1.4.0"
 ansi-to-tui = "7.0.0"
 ratatui = { version = "0.29.0", features = ["all-widgets"] }
