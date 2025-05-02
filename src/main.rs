@@ -1,4 +1,5 @@
 use atty::Stream;
+use crossbeam_channel::{select, unbounded, Receiver};
 use getopts::Options;
 use itertools::Itertools;
 use std::env;
@@ -6,13 +7,13 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::thread;
 use std::time::Duration;
 
-use tokio::stream::StreamExt;
 use ratatui::{backend::CrosstermBackend, Terminal};
 
 use crossterm::{
-    event::Event as CEvent,
+    event::{self, Event as CEvent},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -40,8 +41,7 @@ pub struct CliArgs {
     raw_mode: bool,
 }
 
-#[tokio::main]
-async fn main() -> Result<(), failure::Error> {
+fn main() -> Result<(), failure::Error> {
     let args = handle_cli_arguments();
     let home_path = env::var("HOME").expect("$HOME not set");
     let config_path = &env::var("XDG_CONFIG_HOME")
@@ -70,7 +70,6 @@ async fn main() -> Result<(), failure::Error> {
     let history = CommandList::load_from_file(config_path.join("history"), Some(config.history_size));
 
     // create app and set default
-
     let mut app = App::new(execution_handler, args.raw_mode, config.clone(), bookmarks, history);
 
     if let Some(default_value) = args.default_content {
@@ -84,9 +83,9 @@ async fn main() -> Result<(), failure::Error> {
 
     // render on stdout if output is not piped into something. if it is, use stderr.
     if atty::is(Stream::Stdout) {
-        run_app(&mut app, io::stdout()).await?;
+        run_app(&mut app, io::stdout())?;
     } else {
-        run_app(&mut app, io::stderr()).await?;
+        run_app(&mut app, io::stderr())?;
     }
 
     after_finish(&app, args.output_file)?;
@@ -115,7 +114,7 @@ fn handle_cli_arguments() -> CliArgs {
     opts.optflag("h", "help", "print this help menu");
 
     let matches = match opts.parse(&cli_args[1..]) {
-        Ok(m) => { m }
+        Ok(m) => m,
         Err(e) => {
             eprintln!("{}: {}", program, e.to_string());
             std::process::exit(1);
@@ -167,8 +166,30 @@ fn after_finish(app: &App, out_file: Option<String>) -> Result<(), failure::Erro
     Ok(())
 }
 
-/// TODO: "Pretty descriptive of a name, I argue" - El Kowar 2022 in Discord:TM: vc
-async fn run_app<W: Write>(mut app: &mut App, mut output_stream: W) -> Result<(), failure::Error> {
+// Start a thread that reads events from crossterm and sends them through a channel
+fn spawn_event_reader_thread() -> Receiver<CEvent> {
+    let (sender, receiver) = unbounded();
+
+    thread::spawn(move || {
+        loop {
+            // This is a blocking call that waits for the next event
+            match event::read() {
+                Ok(event) => {
+                    // If sending fails, the channel is closed, so exit the thread
+                    if sender.send(event).is_err() {
+                        break;
+                    }
+                }
+                // If reading fails, also exit
+                Err(_) => break,
+            }
+        }
+    });
+
+    receiver
+}
+
+fn run_app<W: Write>(mut app: &mut App, mut output_stream: W) -> Result<(), failure::Error> {
     execute!(output_stream, EnterAlternateScreen)?;
     enable_raw_mode()?;
     let backend = CrosstermBackend::new(output_stream);
@@ -183,8 +204,21 @@ async fn run_app<W: Write>(mut app: &mut App, mut output_stream: W) -> Result<()
     }));
 
     let mut all_errors = Vec::new();
-    let mut crossterm_event_stream = crossterm::event::EventStream::new();
-    let mut tick_interval = tokio::time::interval(Duration::from_millis(100));
+
+    // Create a tick channel
+    let (tick_sender, tick_receiver) = unbounded();
+    thread::spawn(move || {
+        let tick_interval = Duration::from_millis(100);
+        loop {
+            thread::sleep(tick_interval);
+            if tick_sender.send(()).is_err() {
+                break;
+            }
+        }
+    });
+
+    // Create an event reader thread
+    let event_receiver = spawn_event_reader_thread();
 
     while !app.should_quit {
         let draw_result = ui::draw_app(&mut terminal, &mut app);
@@ -192,17 +226,25 @@ async fn run_app<W: Write>(mut app: &mut App, mut output_stream: W) -> Result<()
             all_errors.push(format!("{}", err));
         }
 
-        tokio::select! {
-            Some(cmd_output) = app.execution_handler.cmd_out_receive.recv() => app.on_cmd_output(cmd_output),
-            _ = tick_interval.tick() => app.on_tick(),
-            Some(maybe_event) = crossterm_event_stream.next() => match maybe_event {
-                Ok(CEvent::Key(key_evt)) => app.on_tui_event(key_evt.code, key_evt.modifiers).await,
-                Err(_) => break,
-                _ => {}
+        select! {
+            recv(app.execution_handler.cmd_out_receive) -> msg => {
+                if let Ok(cmd_output) = msg {
+                    app.on_cmd_output(cmd_output);
+                }
+            },
+            recv(tick_receiver) -> _ => {
+                app.on_tick();
+            },
+            recv(event_receiver) -> msg => {
+                if let Ok(CEvent::Key(key_evt)) = msg {
+                    app.on_tui_event(key_evt.code, key_evt.modifiers);
+                }
             }
-        };
+        }
     }
-    app.execution_handler.stop().await;
+
+    app.execution_handler.stop();
+
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     std::io::Write::flush(&mut terminal.backend_mut())?;

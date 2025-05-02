@@ -142,7 +142,7 @@ impl App {
         self.opened_key_select_menu = Some(key_select_menu);
     }
 
-    pub async fn handle_main_window_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
+    pub fn handle_main_window_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         let control_pressed = modifiers.contains(KeyModifiers::CONTROL);
 
         if let Some(autocomplete_state) = self.autocomplete_state.as_mut() {
@@ -195,7 +195,7 @@ impl App {
             }
             KeyCode::Enter if !modifiers.contains(KeyModifiers::ALT) => {
                 self.history.push(self.input_state.content_to_commandentry());
-                self.execute_content().await;
+                self.execute_content();
             }
 
             _ => {
@@ -215,7 +215,7 @@ impl App {
                     }
 
                     if self.autoeval_mode && previous_content != *new_content {
-                        self.execute_content().await;
+                        self.execute_content();
                     }
                 }
             }

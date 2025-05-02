@@ -17,7 +17,7 @@ exclude = ["build_docker.sh", "showcase.gif"]
 
 [dependencies]
 config = { version = "0.11", features = ['toml'] }
-crossterm = { version = "0.28.1", features = ['event-stream'] }
+crossterm = "0.28.1"
 failure = "0.1.6"
 itertools = "0.10"
 unicode-width = "0.1.5"
@@ -25,8 +25,7 @@ which = "4.0"
 getopts = "0.2"
 maplit = "1.0"
 atty = "0.2"
-tokio = { version = "0.2", features = ["full"] }
-futures = "0.3.4"
+crossbeam-channel = "0.5"
 syntect = "4.1.0"
 lazy_static = "1.4.0"
 ansi-parser = "0.8"

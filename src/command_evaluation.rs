@@ -1,11 +1,8 @@
-use futures::future::Either::*;
-use futures::stream::StreamExt;
-use std::process::Stdio;
-use std::{io::BufRead, str, time::Duration};
-use tokio::io::{self, AsyncBufReadExt};
-use tokio::prelude::*;
-use tokio::process::{Child, Command};
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use std::io::{BufRead, BufReader, Write};
+use std::process::{Child, Command, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
+use crossbeam_channel::{unbounded, Receiver, Sender};
 
 const BUBBLEWRAP_ARGS: &str = "--ro-bind / / --tmpfs /tmp --dev /dev --proc /proc --die-with-parent --share-net --unshare-pid";
 
@@ -43,9 +40,9 @@ pub enum CmdOutput {
 impl CommandExecutionHandler {
     /// start a CommandExecutionHandler thread.
     pub fn start(cmd_timeout: Duration, execution_mode: ExecutionMode, eval_environment: Vec<String>) -> CommandExecutionHandler {
-        let (cmd_in_send, mut cmd_in_receive) = mpsc::channel::<CommandExecutionRequest>(10);
-        let (mut cmd_out_send, cmd_out_receive) = mpsc::channel::<CmdOutput>(10);
-        let (stop_send, mut stop_receive) = mpsc::channel::<()>(10);
+        let (cmd_in_send, cmd_in_receive) = unbounded::<CommandExecutionRequest>();
+        let (cmd_out_send, cmd_out_receive) = unbounded::<CmdOutput>();
+        let (stop_send, stop_receive) = unbounded::<()>();
 
         let executor = CommandExecutionHandler {
             eval_environment: eval_environment.clone(),
@@ -55,128 +52,97 @@ impl CommandExecutionHandler {
             stop_send,
         };
 
-        tokio::spawn(async move {
-            let mut handle = Left(futures::future::pending());
-            let mut out_lines_stream = Left(futures::stream::pending());
-            let mut err_lines_stream = Left(futures::stream::pending());
-            let mut out_lines = String::new();
-            let mut err_lines = String::new();
-
+        thread::spawn(move || {
+            let mut current_child: Option<Child> = None;
+            let mut current_timeout: Option<(Instant, Duration)> = None;
+            
             loop {
-                tokio::select! {
-                    Some(new_cmd) = cmd_in_receive.recv() => {
-                        let child = execution_mode.run_cmd_tokio(&eval_environment, &new_cmd.command);
-                        match child {
-                            Ok(mut child) =>  {
-
-                                // this need's improving or at least some more testing
-                                if let Some(stdin_content) = new_cmd.stdin {
-                                    let mut stdin = child.stdin.take().unwrap();
-                                    tokio::spawn(async move {
-                                        for line in stdin_content {
-                                            let _ = stdin.write_all(format!("{}\n", line).as_bytes()).await;
-                                        }
-                                    });
-                                }
-
-                                out_lines_stream = Right(io::BufReader::new(child.stdout.take().unwrap()).lines());
-                                err_lines_stream = Right(io::BufReader::new(child.stderr.take().unwrap()).lines());
-                                out_lines = String::new();
-                                err_lines = String::new();
-                                handle = Right(tokio::time::timeout(cmd_timeout, child));
+                // Check if we need to poll the current process
+                if let Some(child) = &mut current_child {
+                    if let Some((start_time, timeout_duration)) = current_timeout {
+                        if start_time.elapsed() > timeout_duration {
+                            // Command timed out
+                            let _ = child.kill();
+                            cmd_out_send.send(CmdOutput::NotOk("Command timed out".to_string())).unwrap();
+                            current_child = None;
+                            current_timeout = None;
+                        } else if let Ok(Some(status)) = child.try_wait() {
+                            // Process has completed
+                            let stdout = child.stdout.take().unwrap();
+                            let stderr = child.stderr.take().unwrap();
+                            
+                            let stdout_reader = BufReader::new(stdout);
+                            let stderr_reader = BufReader::new(stderr);
+                            
+                            let out_lines: String = stdout_reader.lines()
+                                .filter_map(Result::ok)
+                                .collect::<Vec<String>>()
+                                .join("\n") + "\n";
+                                
+                            let err_lines: String = stderr_reader.lines()
+                                .filter_map(Result::ok)
+                                .collect::<Vec<String>>()
+                                .join("\n") + "\n";
+                            
+                            if status.success() {
+                                cmd_out_send.send(CmdOutput::Ok(out_lines)).unwrap();
+                            } else {
+                                cmd_out_send.send(CmdOutput::NotOk(err_lines)).unwrap();
                             }
-                            Err(err) => cmd_out_send.send(CmdOutput::NotOk(err)).await.ok().unwrap(),
+                            
+                            current_child = None;
+                            current_timeout = None;
                         }
                     }
-
-                    Some(line) = out_lines_stream.next() => {
-                        match line {
-                            Ok(line) => out_lines.push_str(&(line + "\n")),
-                            Err(err) => {
-                                cmd_out_send.send(CmdOutput::NotOk(format!("Error: {}", err))).await.ok().unwrap();
-                                handle = Left(futures::future::pending());
-                            }
-                        }
-                    }
-                    Some(line) = err_lines_stream.next() => {
-                        match line {
-                            Ok(line) => err_lines.push_str(&(line + "\n")),
-                            Err(err) => {
-                                cmd_out_send.send(CmdOutput::NotOk(format!("Error: {}", err))).await.ok().unwrap();
-                                handle = Left(futures::future::pending());
-                            }
-                        }
-                    }
-
-                    result = &mut handle => {
-                        // resulting_output contains the command's output if everything went well,
-                        // stderr if it exited non-zero, and if any other error occured information about that.
-                        let resulting_output = match result {
-                            Ok(Ok(result)) => {
-                                if result.success() {
-                                    if let Right(stream) = out_lines_stream {
-                                        let results = stream.collect::<Vec<Result<_, _>>>().await.into_iter().collect::<Result<Vec<_>, _>>();
-                                        match results {
-                                            Ok(pending_lines) => {
-                                                out_lines.push_str(&pending_lines.join("\n"));
-                                                CmdOutput::Ok(out_lines)
+                }
+                
+                // Check for new commands or stop signals
+                crossbeam_channel::select! {
+                    recv(cmd_in_receive) -> msg => {
+                        if let Ok(new_cmd) = msg {
+                            let child = execution_mode.run_cmd_std(&eval_environment, &new_cmd.command);
+                            match child {
+                                Ok(mut child) => {
+                                    // Handle stdin if provided
+                                    if let Some(stdin_content) = new_cmd.stdin {
+                                        if let Some(stdin) = &mut child.stdin {
+                                            for line in stdin_content {
+                                                let _ = writeln!(stdin, "{}", line);
                                             }
-                                            Err(err) => CmdOutput::NotOk(format!("{}", err)),
                                         }
-                                    } else {
-                                        CmdOutput::Ok(out_lines)
                                     }
-                                } else {
-                                    if let Right(stream) = err_lines_stream {
-                                        let results = stream.collect::<Vec<Result<_, _>>>().await.into_iter().collect::<Result<Vec<_>, _>>();
-                                        match results {
-                                            Ok(pending_lines) => {
-                                                err_lines.push_str(&pending_lines.join("\n"));
-                                                CmdOutput::NotOk(err_lines)
-                                            }
-                                            Err(err) => CmdOutput::NotOk(format!("{}", err)),
-                                        }
-                                    } else {
-                                        CmdOutput::NotOk(err_lines)
-                                    }
+                                    
+                                    current_child = Some(child);
+                                    current_timeout = Some((Instant::now(), cmd_timeout));
                                 }
-                            },
-
-                            Err(_) => CmdOutput::NotOk("Command timed out".to_string()),
-                            Ok(Err(err)) => CmdOutput::NotOk(format!("Error running command: {}", err)),
-                        };
-
-                        cmd_out_send.send(resulting_output).await.ok().unwrap();
-
-                        handle = Left(futures::future::pending());
-                        out_lines_stream = Left(futures::stream::pending());
-                        err_lines_stream = Left(futures::stream::pending());
-                        out_lines = String::new();
-                        err_lines = String::new();
-                    }
-                    Some(_) = stop_receive.recv() => break,
-                };
+                                Err(err) => cmd_out_send.send(CmdOutput::NotOk(err)).unwrap(),
+                            }
+                        }
+                    },
+                    recv(stop_receive) -> _ => break,
+                    default(std::time::Duration::from_millis(10)) => {} // Small sleep to prevent busy waiting
+                }
             }
         });
+        
         executor
     }
 
     /// execute a single command, returning it's output in this executors cmd_out channel
-    pub async fn execute(&mut self, cmd: CommandExecutionRequest) {
-        self.cmd_in_send.send(cmd).await.ok().unwrap();
+    pub fn execute(&mut self, cmd: CommandExecutionRequest) {
+        self.cmd_in_send.send(cmd).unwrap();
     }
 
     /// stop the executor thread
-    pub async fn stop(&mut self) {
-        self.stop_send.send(()).await.unwrap();
+    pub fn stop(&mut self) {
+        self.stop_send.send(()).unwrap();
     }
 }
 
 impl ExecutionMode {
-    /// spawn an asynchronously running child using this executionMode, returning Err if something went wrong while spawning.
+    /// spawn a child process using this executionMode, returning Err if something went wrong while spawning.
     /// the command has stdout, stderr and stdin as `Stdio::piped()`, so all are available.
-    /// The child is also `kill_on_drop`, so it will be killed when the child value is dropped.
-    fn run_cmd_tokio(&self, eval_environment: &[String], cmd: &str) -> Result<Child, String> {
+    fn run_cmd_std(&self, eval_environment: &[String], cmd: &str) -> Result<Child, String> {
         match self {
             ExecutionMode::ISOLATED => Command::new("bwrap")
                 .args(BUBBLEWRAP_ARGS.split(' '))
@@ -185,7 +151,6 @@ impl ExecutionMode {
                 .stdout(Stdio::piped())
                 .stdin(Stdio::piped())
                 .stderr(Stdio::piped())
-                .kill_on_drop(true)
                 .spawn()
                 .map_err(|_| "Unable to spawn command".to_string()),
 
@@ -200,7 +165,6 @@ impl ExecutionMode {
                     .stdout(Stdio::piped())
                     .stdin(Stdio::piped())
                     .stderr(Stdio::piped())
-                    .kill_on_drop(true)
                     .spawn()
                     .map_err(|_| "Unable to spawn command".to_string())
             }

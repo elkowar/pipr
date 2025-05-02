@@ -147,7 +147,7 @@ impl App {
         self.history.push(self.input_state.content_to_commandentry());
     }
 
-    pub async fn execute_content(&mut self) {
+    pub fn execute_content(&mut self) {
         let lines = self.input_state.content_lines().clone();
         let lines = match self.cached_command_part {
             Some(CachedCommandPart { end_line, end_col, .. }) => lines.split_strings_at_offset(end_line, end_col).1,
@@ -167,7 +167,7 @@ impl App {
 
         let execution_request =
             CommandExecutionRequest::new(command, self.cached_command_part.as_ref().map(|x| x.cached_output.to_owned()));
-        self.execution_handler.execute(execution_request).await;
+        self.execution_handler.execute(execution_request);
         self.is_processing_state = Some(0);
         self.last_executed_cmd = self.input_state.content_str();
     }
@@ -201,20 +201,20 @@ impl App {
         }
     }
 
-    pub async fn on_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
+    pub fn on_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         let control_pressed = modifiers.contains(KeyModifiers::CONTROL);
         match code {
             KeyCode::F(1) => self.toggle_help_window(),
             KeyCode::Char('b') if control_pressed => self.toggle_bookmark_list(),
             KeyCode::F(4) => self.toggle_history_list(),
-            _ => self.handle_window_specific_event(code, modifiers).await,
+            _ => self.handle_window_specific_event(code, modifiers),
         }
     }
 
-    pub async fn handle_window_specific_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
+    pub fn handle_window_specific_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         let window_state = &mut self.window_state;
         match window_state {
-            WindowState::Main => self.handle_main_window_tui_event(code, modifiers).await,
+            WindowState::Main => self.handle_main_window_tui_event(code, modifiers),
             WindowState::TextView(_, _) => self.window_state = WindowState::Main,
 
             WindowState::BookmarkList(state) => match code {
