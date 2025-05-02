@@ -1,14 +1,10 @@
 use crate::app::command_list_window::CommandListState;
-use crate::app::app::{App, WindowState};
+use crate::app::{App, WindowState};
 
 use ansi_parser::AnsiParser;
 use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
-};
-use std::{
-    borrow::Cow,
-    io::{self, Write},
 };
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -17,6 +13,10 @@ use ratatui::{
     backend::Backend,
     text::{Line, Span, Text},
     Frame, Terminal,
+};
+use std::{
+    borrow::Cow,
+    io::{self, Write},
 };
 use Constraint::*;
 
@@ -292,14 +292,7 @@ fn apply_graphics_mode_to_style(style: &mut Style, modes: &[u8]) {
     };
 }
 
-fn draw_outputs(
-    f: &mut Frame,
-    rect: Rect,
-    changed: bool,
-    processing_state: Option<u8>,
-    stdout: &str,
-    stderr: &str,
-) {
+fn draw_outputs(f: &mut Frame, rect: Rect, changed: bool, processing_state: Option<u8>, stdout: &str, stderr: &str) {
     let mut current_style = Style::default();
     let text_iter = stdout.lines().map(|line| {
         let spans = line

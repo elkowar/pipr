@@ -28,7 +28,7 @@ mod snippets;
 mod ui;
 mod util;
 
-use app::app::App;
+use app::App;
 use command_evaluation::*;
 use commandlist::CommandList;
 use pipr_config::*;
