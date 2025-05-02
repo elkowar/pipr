@@ -1,0 +1,61 @@
+use crate::app::command_list_window::CommandListState;
+use ratatui::{
+    layout::{Constraint, Direction, Layout, Rect},
+    text::Span,
+    widgets::{List, ListItem, ListState, Paragraph},
+    Frame,
+};
+
+use crate::ui::make_default_block;
+
+/// Draw the command list UI (used for both bookmarks and history)
+///
+/// # Arguments
+///
+/// * `f` - The frame to render to
+/// * `rect` - The area to render in
+/// * `always_show_preview` - Whether to always show the preview area
+/// * `state` - The state of the command list
+/// * `title` - The title to display
+pub fn draw_command_list(f: &mut Frame, rect: Rect, always_show_preview: bool, state: &CommandListState, title: &str) {
+    let show_preview = always_show_preview || state.selected_entry().map(|e| e.lines().len() > 1) == Some(true);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Percentage(if show_preview { 60 } else { 100 }),
+                Constraint::Percentage(100),
+            ]
+            .as_ref(),
+        )
+        .split(rect);
+
+    let items = state
+        .list
+        .iter()
+        .map(|entry| entry.as_string().replace("\n", " ↵ "))
+        .map(|entry| ListItem::new(Span::raw(entry)))
+        .collect::<Vec<_>>();
+
+    let mut list_state = ListState::default();
+    list_state.select(state.selected_idx);
+
+    use ratatui::style::{Modifier, Style};
+
+    let list_widget = List::new(items)
+        .block(make_default_block(title, true))
+        .highlight_style(Style::default().add_modifier(Modifier::ITALIC))
+        .highlight_symbol(">>");
+
+    f.render_stateful_widget(list_widget, chunks[0], &mut list_state);
+
+    if show_preview {
+        if let Some(selected_content) = state.selected_entry() {
+            f.render_widget(
+                Paragraph::new(selected_content.as_string().as_str()).block(make_default_block("Preview", false)),
+                chunks[1],
+            );
+        }
+    }
+}

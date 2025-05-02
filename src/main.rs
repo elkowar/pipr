@@ -25,7 +25,7 @@ mod commandlist;
 mod lineeditor;
 mod pipr_config;
 mod snippets;
-mod ui;
+pub mod ui;
 mod util;
 
 use app::App;
