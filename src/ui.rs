@@ -33,7 +33,7 @@ lazy_static! {
     static ref PLAINTEXT_SYNTAX: &'static SyntaxReference = SYNTAX_SET.find_syntax_plain_text();
 }
 
-pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, mut app: &mut App) -> Result<(), failure::Error> {
+pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, mut app: &mut App) -> anyhow::Result<()> {
     if let Some((stdin_content, mut should_jump_to_other_cmd)) = app.should_jump_to_other_cmd.take() {
         execute!(io::stdout(), LeaveAlternateScreen)?;
         let mut child = should_jump_to_other_cmd.env("MAN_POSIXLY_CORRECT", "1").spawn()?;

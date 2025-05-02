@@ -41,7 +41,7 @@ pub struct CliArgs {
     raw_mode: bool,
 }
 
-fn main() -> Result<(), failure::Error> {
+fn main() -> anyhow::Result<()> {
     let args = handle_cli_arguments();
     let home_path = env::var("HOME").expect("$HOME not set");
     let config_path = &env::var("XDG_CONFIG_HOME")
@@ -142,7 +142,7 @@ fn handle_cli_arguments() -> CliArgs {
 /// executed after the program has been closed.
 /// optionally given out_file, a path to a file that the
 /// final command will be written to (mostly for scripting stuff)
-fn after_finish(app: &App, out_file: Option<String>) -> Result<(), failure::Error> {
+fn after_finish(app: &App, out_file: Option<String>) -> anyhow::Result<()> {
     let finished_command = if app.raw_mode {
         app.input_state.content_lines().join("\n")
     } else {
@@ -189,7 +189,7 @@ fn spawn_event_reader_thread() -> Receiver<CEvent> {
     receiver
 }
 
-fn run_app<W: Write>(mut app: &mut App, mut output_stream: W) -> Result<(), failure::Error> {
+fn run_app<W: Write>(mut app: &mut App, mut output_stream: W) -> anyhow::Result<()> {
     execute!(output_stream, EnterAlternateScreen)?;
     enable_raw_mode()?;
     let backend = CrosstermBackend::new(output_stream);

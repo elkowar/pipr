@@ -18,7 +18,7 @@ exclude = ["build_docker.sh", "showcase.gif"]
 [dependencies]
 config = { version = "0.11", features = ['toml'] }
 crossterm = "0.28.1"
-failure = "0.1.6"
+anyhow = "1.0"
 itertools = "0.10"
 unicode-width = "0.1.5"
 which = "4.0"
