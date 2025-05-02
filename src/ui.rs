@@ -10,12 +10,12 @@ use std::{
     borrow::Cow,
     io::{self, Write},
 };
-use tui::layout::{Constraint, Direction, Layout, Rect};
-use tui::style::{Color, Modifier, Style};
-use tui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
-use tui::{
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
+use ratatui::{
     backend::Backend,
-    text::{Span, Spans, Text},
+    text::{Line, Span, Text},
     Frame, Terminal,
 };
 use Constraint::*;
@@ -49,12 +49,14 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, mut app: &mut App) -> Re
         }
         child.wait()?;
         execute!(io::stdout(), EnterAlternateScreen)?;
-        terminal.resize(terminal.size()?)?; // this will redraw the whole screen
+        let size = terminal.size()?;
+        let rect = Rect::new(0, 0, size.width, size.height);
+        terminal.resize(rect)?; // this will redraw the whole screen
     }
 
-    let mut input_field_rect = tui::layout::Rect::new(0, 0, 0, 0);
+    let mut input_field_rect = ratatui::layout::Rect::new(0, 0, 0, 0);
     terminal.draw(|mut f| {
-        let root_rect = f.size();
+        let root_rect = f.area();
         let root_rect = Rect::new(1, 1, root_rect.width - 2, root_rect.height - 2);
         match &app.window_state {
             WindowState::Main => {
@@ -125,11 +127,11 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, mut app: &mut App) -> Re
 
                 let cursor_x = input_field_rect.x + 1 + app.input_state.displayed_cursor_column() as u16;
                 let cursor_y = input_field_rect.y + 1 + app.input_state.cursor_line as u16;
-                f.set_cursor(cursor_x, cursor_y);
+                f.set_cursor_position((cursor_x, cursor_y));
             }
             WindowState::TextView(title, text) => {
                 f.render_widget(
-                    Paragraph::new(text.as_ref()).block(make_default_block(title, true)),
+                    Paragraph::new(text.as_str()).block(make_default_block(title, true)),
                     root_rect,
                 );
             }
@@ -152,7 +154,7 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, mut app: &mut App) -> Re
     Ok(())
 }
 
-fn draw_command_list<B: Backend>(f: &mut Frame<B>, rect: Rect, always_show_preview: bool, state: &CommandListState, title: &str) {
+fn draw_command_list(f: &mut Frame, rect: Rect, always_show_preview: bool, state: &CommandListState, title: &str) {
     let show_preview = always_show_preview || state.selected_entry().map(|e| e.lines().len() > 1) == Some(true);
 
     let chunks = Layout::default()
@@ -187,7 +189,7 @@ fn draw_command_list<B: Backend>(f: &mut Frame<B>, rect: Rect, always_show_previ
     }
 }
 
-fn draw_input_field<B: Backend>(f: &mut Frame<B>, rect: Rect, app: &mut App) {
+fn draw_input_field(f: &mut Frame, rect: Rect, app: &mut App) {
     // TODO this is hideously inefficient
     //      also make themes configurable?
     //      also highlight errors if possible?
@@ -209,13 +211,13 @@ fn draw_input_field<B: Backend>(f: &mut Frame<B>, rect: Rect, app: &mut App) {
                 highlighter
                     .highlight(line, &SYNTAX_SET)
                     .iter()
-                    .map(|(style, part)| Span::styled(*part, highlight_style_to_tui_style(&style)))
+                    .map(|(style, part)| Span::styled(*part, highlight_style_to_ratatui_style(&style)))
                     .collect_vec()
             })
-            .map(Spans::from)
+            .map(Line::from)
             .collect_vec()
     } else {
-        lines.iter().map(Span::raw).map(Spans::from).collect_vec()
+        lines.iter().map(Span::raw).map(Line::from).collect_vec()
     };
 
     let is_bookmarked = app.bookmarks.entries().contains(&app.input_state.content_to_commandentry());
@@ -290,8 +292,8 @@ fn apply_graphics_mode_to_style(style: &mut Style, modes: &[u8]) {
     };
 }
 
-fn draw_outputs<B: Backend>(
-    f: &mut Frame<B>,
+fn draw_outputs(
+    f: &mut Frame,
     rect: Rect,
     changed: bool,
     processing_state: Option<u8>,
@@ -311,7 +313,7 @@ fn draw_outputs<B: Backend>(
                 _ => None,
             })
             .collect_vec();
-        Spans::from(spans)
+        Line::from(spans)
     });
 
     let output_chunks = Layout::default()
@@ -361,7 +363,7 @@ fn display_processing_state(state: Option<u8>) -> &'static str {
     }
 }
 
-fn highlight_style_to_tui_style(style: &highlighting::Style) -> Style {
+fn highlight_style_to_ratatui_style(style: &highlighting::Style) -> Style {
     let fg = style.foreground;
     Style::default().fg(Color::Rgb(fg.r, fg.g, fg.b)).bg(Color::Reset)
 }
