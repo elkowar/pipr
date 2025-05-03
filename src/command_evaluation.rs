@@ -87,19 +87,13 @@ impl CommandExecutionHandler {
                         current_child = None;
                         current_timeout = None;
                     } else if let Ok(Some(status)) = child.try_wait() {
-                        // Process has completed
-                        let stdout = child.stdout.take().unwrap();
-                        let stderr = child.stderr.take().unwrap();
-
-                        let out_lines = read_lines_to_string(BufReader::new(stdout));
-                        let err_lines = read_lines_to_string(BufReader::new(stderr));
-
+                        let out_lines = read_lines_to_string(BufReader::new(child.stdout.take().unwrap()));
+                        let err_lines = read_lines_to_string(BufReader::new(child.stderr.take().unwrap()));
                         let output = if status.success() {
                             CmdOutput::Ok(out_lines)
                         } else {
                             CmdOutput::NotOk(err_lines)
                         };
-
                         cmd_out_send.send(output).unwrap();
                         current_child = None;
                         current_timeout = None;
