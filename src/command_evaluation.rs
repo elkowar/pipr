@@ -1,9 +1,13 @@
 use anyhow::{bail, Context};
-use crossbeam_channel::{unbounded, Receiver, RecvError, Sender};
+use crossbeam_channel::{unbounded, Receiver, Sender};
+use libc::SIGKILL;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use wait_timeout::ChildExt;
 
 // Constants for command execution
 const BUBBLEWRAP_ARGS: &[&str] = &[
@@ -84,83 +88,32 @@ impl CommandExecutionHandler {
         };
 
         thread::spawn(move || {
-            let mut active_command: Option<(Child, Instant, Duration)> = None;
+            let mut active_command: Option<BackgroundChildHandle> = None;
 
             loop {
-                enum Event {
-                    CommandExecutionRequest(Result<CommandExecutionRequest, RecvError>),
-                    StopReceived,
-                    RecheckCommandOutput,
-                }
-
-                // Wait for messages, with or without a timeout depending on whether we have an active command
-                let select_result = if active_command.is_some() {
-                    crossbeam_channel::select! {
-                        recv(cmd_in_receive) -> msg => Event::CommandExecutionRequest(msg),
-                        recv(stop_receive) -> _ => Event::StopReceived,
-                        default(Duration::from_millis(50)) => Event::RecheckCommandOutput // Just a timeout to check process status
-                    }
-                } else {
-                    crossbeam_channel::select! {
-                        recv(cmd_in_receive) -> msg => Event::CommandExecutionRequest(msg),
-                        recv(stop_receive) -> _ => Event::StopReceived
-                    }
-                };
-
-                match select_result {
-                    Event::CommandExecutionRequest(Ok(new_cmd)) => {
-                        // Got a new command request
+                crossbeam_channel::select! {
+                    recv(cmd_in_receive) -> msg => {
+                        let Ok(new_cmd) = msg else { break; };
                         match spawn_command(&shell_command, &new_cmd.command, execution_mode) {
                             Ok(mut child) => {
-                                // Handle stdin if provided
                                 if let Some(stdin_content) = new_cmd.stdin {
-                                    if let Some(stdin) = &mut child.stdin {
-                                        for line in stdin_content {
-                                            let _ = writeln!(stdin, "{}", line);
-                                        }
-                                    }
+                                    let _ = write_stdin_to_child(&mut child, stdin_content);
                                 }
-
-                                // Set up the command with its execution timeout
-                                active_command = Some((child, Instant::now(), cmd_timeout));
+                                if let Some(old_command) = active_command.take() {
+                                    old_command.kill();
+                                }
+                                active_command = Some(wait_for_child_and_send_output(child, cmd_timeout, cmd_out_send.clone()));
                             }
                             Err(err) => cmd_out_send.send(CmdOutput::NotOk(err.to_string())).unwrap(),
                         }
-                    }
-                    Event::StopReceived => break,
-                    Event::RecheckCommandOutput | Event::CommandExecutionRequest(Err(_)) => {
-                        if let Some((mut child, start_time, timeout)) = active_command.take() {
-                            // Check if command has timed out
-                            if start_time.elapsed() >= timeout {
-                                let _ = child.kill();
-                                cmd_out_send.send(CmdOutput::NotOk("Command timed out".to_string())).unwrap();
-                                active_command = None;
-                            } else {
-                                match child.try_wait() {
-                                    Ok(Some(status)) => {
-                                        // Process has completed
-                                        let out_lines = read_lines_to_string(BufReader::new(child.stdout.take().unwrap()));
-                                        let err_lines = read_lines_to_string(BufReader::new(child.stderr.take().unwrap()));
-                                        let output = if status.success() {
-                                            CmdOutput::Ok(out_lines)
-                                        } else {
-                                            CmdOutput::NotOk(err_lines)
-                                        };
-                                        cmd_out_send.send(output).unwrap();
-                                    }
-                                    Ok(None) => {
-                                        active_command = Some((child, start_time, timeout));
-                                    }
-                                    Err(e) => {
-                                        cmd_out_send
-                                            .send(CmdOutput::NotOk(format!("Error waiting for process: {}", e)))
-                                            .unwrap();
-                                    }
-                                }
-                            }
+                    },
+                    recv(stop_receive) -> _ => {
+                        if let Some(handle) = active_command.take() {
+                            handle.kill();
                         }
-                    }
-                }
+                        break;
+                    },
+                };
             }
         });
 
@@ -233,4 +186,75 @@ pub fn execute_command_blocking(shell_command: &[String], cmd: &str, mode: Execu
 /// Read lines from a BufRead into a single string, ignoring all lines with read errors
 fn read_lines_to_string<R: BufRead>(reader: R) -> String {
     reader.lines().filter_map(Result::ok).collect::<Vec<String>>().join("\n") + "\n"
+}
+
+fn write_stdin_to_child(child: &mut Child, stdin_content: Vec<String>) -> anyhow::Result<()> {
+    if let Some(stdin) = &mut child.stdin {
+        for line in stdin_content {
+            writeln!(stdin, "{}", line)?;
+        }
+    }
+    Ok(())
+}
+
+struct BackgroundChildHandle {
+    pid: u32,
+    /// Whether the child has already ended.
+    /// If the child has been killed through the [`BackgroundChildHandle`], we don't want to handle its output at all.
+    /// If it has already finished normally and sent its output, we don't want to actually kill it on [`Self::kill()`].
+    already_killed: Arc<AtomicBool>,
+}
+
+impl BackgroundChildHandle {
+    fn kill(&self) {
+        if self.already_killed.load(std::sync::atomic::Ordering::SeqCst) {
+            return;
+        }
+        unsafe {
+            libc::kill(self.pid as i32, SIGKILL);
+        }
+        self.already_killed.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// Wait for a child process to finish and send its output through the provided channel.
+fn wait_for_child_and_send_output(
+    mut child: Child,
+    timeout: std::time::Duration,
+    finished_channel: crossbeam_channel::Sender<CmdOutput>,
+) -> BackgroundChildHandle {
+    let pid = child.id();
+    let already_killed = Arc::new(AtomicBool::new(false));
+    let child_handle = BackgroundChildHandle {
+        pid,
+        already_killed: already_killed.clone(),
+    };
+    std::thread::spawn(move || {
+        let status = child.wait_timeout(timeout);
+        if already_killed.load(std::sync::atomic::Ordering::SeqCst) {
+            return;
+        }
+        match status {
+            Ok(Some(status)) => {
+                let out_lines = read_lines_to_string(BufReader::new(child.stdout.take().unwrap()));
+                let err_lines = read_lines_to_string(BufReader::new(child.stderr.take().unwrap()));
+                let output = if status.success() {
+                    CmdOutput::Ok(out_lines)
+                } else {
+                    CmdOutput::NotOk(err_lines)
+                };
+                finished_channel.send(output).unwrap();
+            }
+            Ok(None) => {
+                finished_channel
+                    .send(CmdOutput::NotOk("Command timed out".to_string()))
+                    .unwrap();
+            }
+            Err(err) => {
+                finished_channel.send(CmdOutput::NotOk(err.to_string())).unwrap();
+            }
+        }
+        already_killed.store(true, std::sync::atomic::Ordering::SeqCst);
+    });
+    child_handle
 }

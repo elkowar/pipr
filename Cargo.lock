@@ -628,10 +628,12 @@ dependencies = [
  "getopts",
  "itertools 0.14.0",
  "lazy_static",
+ "libc",
  "maplit",
  "ratatui",
  "syntect",
  "unicode-width 0.2.0",
+ "wait-timeout",
  "which",
 ]
 
@@ -1054,6 +1056,15 @@ name = "unicode-width"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fc81956842c57dac11422a97c3b8195a1ff727f06e85c84ed2e8aa277c9a0fd"
+
+[[package]]
+name = "wait-timeout"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09ac3b126d3914f9849036f826e054cbabdc8519970b8998ddaf3b5bd3c65f11"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "walkdir"
