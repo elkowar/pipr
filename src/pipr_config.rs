@@ -66,9 +66,9 @@ pub struct PiprConfig {
 
 impl PiprConfig {
     pub fn load_from_file(path: &PathBuf) -> PiprConfig {
-        DirBuilder::new().recursive(true).create(&path.parent().unwrap()).unwrap();
+        DirBuilder::new().recursive(true).create(path.parent().unwrap()).unwrap();
         if !path.exists() {
-            create_default_file(&path);
+            create_default_file(path);
         }
 
         let settings = config::Config::builder()

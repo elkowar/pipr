@@ -33,7 +33,7 @@ impl<T: AsRef<str>> StringExt for T {
     fn word_at_idx(&self, idx: usize) -> Option<&str> {
         let adjusted_cursor = {
             let hovered_char = self.get_full_char_at(idx);
-            if (hovered_char == Some(" ") || hovered_char == None) && idx > 0 {
+            if (hovered_char == Some(" ") || hovered_char.is_none()) && idx > 0 {
                 idx - 1
             } else {
                 idx
@@ -41,12 +41,12 @@ impl<T: AsRef<str>> StringExt for T {
         };
 
         let mut left_end = adjusted_cursor;
-        while (self.get_full_char_at(left_end) != Some(" ") || self.as_ref().get(left_end..) == None) && left_end > 0 {
+        while (self.get_full_char_at(left_end) != Some(" ") || self.as_ref().get(left_end..).is_none()) && left_end > 0 {
             left_end -= 1;
         }
 
         let mut right_end = adjusted_cursor;
-        while (self.get_full_char_at(right_end) != Some(" ") || self.as_ref().get(..right_end) == None)
+        while (self.get_full_char_at(right_end) != Some(" ") || self.as_ref().get(..right_end).is_none())
             && right_end < self.as_ref().len()
         {
             right_end += 1;
@@ -55,13 +55,13 @@ impl<T: AsRef<str>> StringExt for T {
         self.as_ref()
             .get(left_end..right_end)
             .map(|x| x.trim())
-            .filter(|&word| word != "")
+            .filter(|&word| !word.is_empty())
     }
 
     fn get_full_char_at(&self, idx: usize) -> Option<&str> {
         let line: &str = self.as_ref();
         let mut char_end = idx + 1;
-        while line.get(idx..char_end) == None && line.len() >= char_end {
+        while line.get(idx..char_end).is_none() && line.len() >= char_end {
             char_end += 1;
         }
         line.get(idx..char_end)

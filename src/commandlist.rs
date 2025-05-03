@@ -150,7 +150,7 @@ impl CommandList {
 
     /// Loads a [`CommandList`] from a file or creates a new one if file doesn't exist.
     pub fn load_from_file(path: PathBuf, max_size: Option<usize>) -> CommandList {
-        if let Some(mut file) = File::open(path.clone()).ok() {
+        if let Ok(mut file) = File::open(path.clone()) {
             let mut contents = String::new();
             file.read_to_string(&mut contents).ok();
             CommandList::deserialize(Some(path), max_size, &contents)

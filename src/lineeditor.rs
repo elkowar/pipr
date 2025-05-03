@@ -47,6 +47,12 @@ pub fn convert_keyevent_to_editorevent(code: KeyCode, modifiers: KeyModifiers) -
     }
 }
 
+impl Default for EditorState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EditorState {
     pub fn new() -> EditorState {
         EditorState {
@@ -95,7 +101,7 @@ impl EditorState {
     /// second argument determines if the cursor should be moved to the end of the inserted text or not.
     pub fn insert_at_cursor(&mut self, text: &str, move_cursor: bool) {
         let cursor_col = self.cursor_col;
-        self.current_line_mut().insert_str(cursor_col, &text);
+        self.current_line_mut().insert_str(cursor_col, text);
         if move_cursor {
             self.cursor_col += text.len()
         }
@@ -114,7 +120,7 @@ impl EditorState {
             return self.cursor_col;
         }
         let mut new_cursor = self.cursor_col + 1;
-        while self.current_line().get(new_cursor..) == None {
+        while self.current_line().get(new_cursor..).is_none() {
             new_cursor += 1;
         }
         new_cursor
@@ -125,7 +131,7 @@ impl EditorState {
             return 0;
         }
         let mut new_cursor = self.cursor_col - 1;
-        while self.current_line().get(new_cursor..) == None {
+        while self.current_line().get(new_cursor..).is_none() {
             new_cursor -= 1;
         }
         new_cursor
@@ -305,19 +311,19 @@ pub mod test {
         let mut le = EditorState::new();
         le.set_content(vec!["as".to_string()]);
         assert_eq!(le.content_str(), "as");
-        assert_eq!(le.displayed_cursor_column(), 2 as usize);
+        assert_eq!(le.displayed_cursor_column(), 2_usize);
 
         le.apply_event(EditorEvent::KillWordBack);
         assert_eq!(le.content_str(), "");
-        assert_eq!(le.displayed_cursor_column(), 0 as usize);
+        assert_eq!(le.displayed_cursor_column(), 0_usize);
 
         le.set_content(vec!["as as as".to_string()]);
         assert_eq!(le.content_str(), "as as as");
-        assert_eq!(le.displayed_cursor_column(), 8 as usize);
+        assert_eq!(le.displayed_cursor_column(), 8_usize);
 
         le.apply_event(EditorEvent::KillWordBack);
         assert_eq!(le.content_str(), "as as");
-        assert_eq!(le.displayed_cursor_column(), 5 as usize);
+        assert_eq!(le.displayed_cursor_column(), 5_usize);
     }
 
     #[test]

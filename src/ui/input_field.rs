@@ -36,7 +36,7 @@ pub fn draw_input_field(f: &mut Frame, rect: Rect, app: &mut App) {
                 };
                 result
                     .iter()
-                    .map(|(style, part)| Span::styled(*part, highlight_style_to_ratatui_style(&style)))
+                    .map(|(style, part)| Span::styled(*part, highlight_style_to_ratatui_style(style)))
                     .collect_vec()
             })
             .map(Line::from)

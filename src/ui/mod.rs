@@ -36,7 +36,7 @@ lazy_static::lazy_static! {
 ///
 /// This is the main entry point for rendering the UI.
 /// It handles different window states and manages the terminal.
-pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, mut app: &mut App) -> anyhow::Result<()> {
+pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> anyhow::Result<()> {
     // Handle command execution that jumps to other programs (like man pages)
     if let Some((stdin_content, mut should_jump_to_other_cmd)) = app.should_jump_to_other_cmd.take() {
         execute!(io::stdout(), LeaveAlternateScreen)?;
@@ -56,7 +56,7 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, mut app: &mut App) -> an
     }
 
     let mut input_field_rect = ratatui::layout::Rect::new(0, 0, 0, 0);
-    terminal.draw(|mut f| {
+    terminal.draw(|f| {
         let root_rect = f.area();
         let root_rect = ratatui::layout::Rect::new(1, 1, root_rect.width - 2, root_rect.height - 2);
 
@@ -110,7 +110,7 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, mut app: &mut App) -> an
                 input_field_rect = exec_chunks[0];
 
                 // Draw the main components
-                draw_input_field(&mut f, input_field_rect, &mut app);
+                draw_input_field(f, input_field_rect, app);
 
                 // Draw autocomplete suggestions if available
                 if let Some(autocomplete_state) = &app.autocomplete_state {
@@ -134,7 +134,7 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, mut app: &mut App) -> an
 
                 // Draw command outputs
                 draw_outputs(
-                    &mut f,
+                    f,
                     exec_chunks[2],
                     app.input_state.content_str() == app.last_executed_cmd,
                     app.is_processing_state,
@@ -157,11 +157,11 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, mut app: &mut App) -> an
             }
             WindowState::BookmarkList(listview_state) => {
                 let always_show_preview = app.config.cmdlist_always_show_preview;
-                draw_command_list(&mut f, root_rect, always_show_preview, listview_state, "Bookmarks");
+                draw_command_list(f, root_rect, always_show_preview, listview_state, "Bookmarks");
             }
             WindowState::HistoryList(listview_state) => {
                 let always_show_preview = app.config.cmdlist_always_show_preview;
-                draw_command_list(&mut f, root_rect, always_show_preview, listview_state, "History");
+                draw_command_list(f, root_rect, always_show_preview, listview_state, "History");
             }
         }
 
@@ -170,7 +170,7 @@ pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, mut app: &mut App) -> an
 
         f.render_widget(
             Paragraph::new("Help: F1"),
-            ratatui::layout::Rect::new(root_rect.width - 10 as u16, root_rect.height as u16, 10, 1),
+            ratatui::layout::Rect::new(root_rect.width - 10_u16, root_rect.height, 10, 1),
         );
     })?;
 

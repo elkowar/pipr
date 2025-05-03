@@ -140,7 +140,7 @@ impl App {
         let current_output = self.command_output.to_owned();
         let output_viewers = &self.config.output_viewers;
         let options = output_viewers.iter().map(|(&k, v)| (k, v.to_owned())).collect();
-        let key_select_menu = KeySelectMenu::new(options, KeySelectMenuType::OpenOutputIn(current_output.into()));
+        let key_select_menu = KeySelectMenu::new(options, KeySelectMenuType::OpenOutputIn(current_output));
         self.opened_key_select_menu = Some(key_select_menu);
     }
 
@@ -229,13 +229,13 @@ impl App {
         if let Some(idx) = self.history_idx {
             if idx > 0 {
                 self.history_idx = Some(idx - 1);
-                self.input_state.load_commandentry(&self.history.get_at(idx - 1).unwrap());
+                self.input_state.load_commandentry(self.history.get_at(idx - 1).unwrap());
             }
         } else if self.history.len() > 0 {
             let new_idx = self.history.len() - 1;
             self.history_idx = Some(new_idx);
             self.history.push(self.input_state.content_to_commandentry());
-            self.input_state.load_commandentry(&self.history.get_at(new_idx).unwrap());
+            self.input_state.load_commandentry(self.history.get_at(new_idx).unwrap());
         }
     }
 
@@ -245,7 +245,7 @@ impl App {
             let new_idx = idx + 1;
             if new_idx < self.history.len() - 1 {
                 self.history_idx = Some(new_idx);
-                self.input_state.load_commandentry(&self.history.get_at(new_idx).unwrap());
+                self.input_state.load_commandentry(self.history.get_at(new_idx).unwrap());
             } else {
                 self.history_idx = None;
                 self.input_state.set_content(vec![String::new()]);

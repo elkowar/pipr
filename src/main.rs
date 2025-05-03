@@ -52,14 +52,14 @@ fn main() -> anyhow::Result<()> {
     let config = PiprConfig::load_from_file(&config_path.join("pipr.toml"));
 
     let execution_mode = if args.unsafe_mode {
-        ExecutionMode::UNSAFE
+        ExecutionMode::Unsafe
     } else {
-        ExecutionMode::ISOLATED
+        ExecutionMode::Isolated
     };
 
     let bubblewrap_available = which::which("bwrap").is_ok();
 
-    if !bubblewrap_available && execution_mode != ExecutionMode::UNSAFE {
+    if !bubblewrap_available && execution_mode != ExecutionMode::Unsafe {
         println!("bubblewrap installation not found. Please make sure you have `bwrap` on your path, or supply --no-isolation to disable safe-mode");
         std::process::exit(1);
     }
@@ -116,7 +116,7 @@ fn handle_cli_arguments() -> CliArgs {
     let matches = match opts.parse(&cli_args[1..]) {
         Ok(m) => m,
         Err(e) => {
-            eprintln!("{}: {}", program, e.to_string());
+            eprintln!("{}: {}", program, e);
             std::process::exit(1);
         }
     };
@@ -154,7 +154,7 @@ fn after_finish(app: &App, out_file: Option<String>) -> anyhow::Result<()> {
         if let Some(cmd) = finish_hook.next() {
             let mut child = Command::new(cmd).args(finish_hook).stdin(Stdio::piped()).spawn()?;
             let stdin = child.stdin.as_mut().unwrap();
-            stdin.write_all(&finished_command.as_bytes())?;
+            stdin.write_all(finished_command.as_bytes())?;
             child.wait()?;
         }
     }
@@ -171,17 +171,10 @@ fn spawn_event_reader_thread() -> Receiver<CEvent> {
     let (sender, receiver) = unbounded();
 
     thread::spawn(move || {
-        loop {
-            // This is a blocking call that waits for the next event
-            match event::read() {
-                Ok(event) => {
-                    // If sending fails, the channel is closed, so exit the thread
-                    if sender.send(event).is_err() {
-                        break;
-                    }
-                }
-                // If reading fails, also exit
-                Err(_) => break,
+        while let Ok(event) = event::read() {
+            // If sending fails, the channel is closed, so exit the thread
+            if sender.send(event).is_err() {
+                break;
             }
         }
     });
@@ -189,7 +182,7 @@ fn spawn_event_reader_thread() -> Receiver<CEvent> {
     receiver
 }
 
-fn run_app<W: Write>(mut app: &mut App, mut output_stream: W) -> anyhow::Result<()> {
+fn run_app<W: Write>(app: &mut App, mut output_stream: W) -> anyhow::Result<()> {
     execute!(output_stream, EnterAlternateScreen)?;
     enable_raw_mode()?;
     let backend = CrosstermBackend::new(output_stream);
@@ -221,7 +214,7 @@ fn run_app<W: Write>(mut app: &mut App, mut output_stream: W) -> anyhow::Result<
     let event_receiver = spawn_event_reader_thread();
 
     while !app.should_quit {
-        let draw_result = ui::draw_app(&mut terminal, &mut app);
+        let draw_result = ui::draw_app(&mut terminal, app);
         if let Err(err) = draw_result {
             all_errors.push(format!("{}", err));
         }

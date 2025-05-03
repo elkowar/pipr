@@ -32,9 +32,9 @@ const SPAWN_ERR: &str = "Unable to spawn command";
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum ExecutionMode {
     /// Run commands directly without isolation (potentially dangerous)
-    UNSAFE,
+    Unsafe,
     /// Run commands in a sandboxed environment
-    ISOLATED,
+    Isolated,
 }
 
 /// Represents a command that should be executed, with optional stdin
@@ -141,12 +141,12 @@ fn is_unsafe_command(cmd: &str) -> bool {
 /// Returns a Child process with piped stdin, stdout, and stderr
 pub fn spawn_command(shell_command: &[String], cmd: &str, mode: ExecutionMode) -> anyhow::Result<Child> {
     let mut command = match mode {
-        ExecutionMode::ISOLATED => {
+        ExecutionMode::Isolated => {
             let mut command = Command::new("bwrap");
             command.args(BUBBLEWRAP_ARGS).args(shell_command.iter());
             command
         }
-        ExecutionMode::UNSAFE => {
+        ExecutionMode::Unsafe => {
             if is_unsafe_command(cmd) {
                 bail!(UNSAFE_CMD_ERR);
             }
@@ -173,7 +173,11 @@ pub fn spawn_command(shell_command: &[String], cmd: &str, mode: ExecutionMode) -
 pub fn execute_command_blocking(shell_command: &[String], cmd: &str, mode: ExecutionMode) -> anyhow::Result<Vec<String>> {
     let mut child = spawn_command(shell_command, cmd, mode)?;
     let stdout = BufReader::new(child.stdout.take().context("No child stdout available")?);
-    let lines: Vec<String> = stdout.lines().filter_map(Result::ok).collect();
+    let lines: Vec<String> = stdout
+        .lines()
+        .collect::<Result<Vec<String>, _>>()
+        .unwrap_or_else(|e| vec![e.to_string()]);
+
     let status = child.wait()?;
 
     if status.success() {
@@ -183,9 +187,13 @@ pub fn execute_command_blocking(shell_command: &[String], cmd: &str, mode: Execu
     }
 }
 
-/// Read lines from a BufRead into a single string, ignoring all lines with read errors
+/// Read lines from a BufRead into a single string, stopping on the first error
 fn read_lines_to_string<R: BufRead>(reader: R) -> String {
-    reader.lines().filter_map(Result::ok).collect::<Vec<String>>().join("\n") + "\n"
+    reader
+        .lines()
+        .collect::<Result<Vec<String>, _>>()
+        .map(|x| x.join("\n") + "\n")
+        .unwrap_or_else(|e| e.to_string())
 }
 
 fn write_stdin_to_child(child: &mut Child, stdin_content: Vec<String>) -> anyhow::Result<()> {
