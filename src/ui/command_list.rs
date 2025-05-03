@@ -12,7 +12,7 @@ use crate::ui::make_default_block;
 pub fn draw_command_list(f: &mut Frame, rect: Rect, always_show_preview: bool, state: &CommandListState, title: &str) {
     let show_preview = always_show_preview || state.selected_entry().map(|e| e.lines().len() > 1) == Some(true);
 
-    let chunks = Layout::default()
+    let [list_chunk, preview_chunk] = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
             [
@@ -21,7 +21,7 @@ pub fn draw_command_list(f: &mut Frame, rect: Rect, always_show_preview: bool, s
             ]
             .as_ref(),
         )
-        .split(rect);
+        .areas(rect);
 
     let items = state
         .list
@@ -40,13 +40,13 @@ pub fn draw_command_list(f: &mut Frame, rect: Rect, always_show_preview: bool, s
         .highlight_style(Style::default().add_modifier(Modifier::ITALIC))
         .highlight_symbol(">>");
 
-    f.render_stateful_widget(list_widget, chunks[0], &mut list_state);
+    f.render_stateful_widget(list_widget, list_chunk, &mut list_state);
 
     if show_preview {
         if let Some(selected_content) = state.selected_entry() {
             f.render_widget(
                 Paragraph::new(selected_content.as_string().as_str()).block(make_default_block("Preview", false)),
-                chunks[1],
+                preview_chunk,
             );
         }
     }

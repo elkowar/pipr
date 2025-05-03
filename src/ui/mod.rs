@@ -188,10 +188,12 @@ pub fn make_default_block(title: &str, selected: bool) -> Block {
     let title_style = if selected {
         Style::default().fg(Color::Black).bg(Color::Cyan)
     } else {
-        Style::default().fg(Color::Cyan).bg(Color::Black)
+        Style::default().fg(Color::Cyan).bg(Color::Reset)
     };
 
-    Block::default().title(Span::styled(title, title_style)).borders(Borders::ALL)
+    Block::default()
+        .title(Span::styled(format!(" {} ", title), title_style))
+        .borders(Borders::ALL)
 }
 
 /// Display an animation indicator, state being the current frame of the 6-frame animation.
