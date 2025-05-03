@@ -9,14 +9,6 @@ use ratatui::{
 use crate::ui::make_default_block;
 
 /// Draw the command list UI (used for both bookmarks and history)
-///
-/// # Arguments
-///
-/// * `f` - The frame to render to
-/// * `rect` - The area to render in
-/// * `always_show_preview` - Whether to always show the preview area
-/// * `state` - The state of the command list
-/// * `title` - The title to display
 pub fn draw_command_list(f: &mut Frame, rect: Rect, always_show_preview: bool, state: &CommandListState, title: &str) {
     let show_preview = always_show_preview || state.selected_entry().map(|e| e.lines().len() > 1) == Some(true);
 

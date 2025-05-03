@@ -53,6 +53,7 @@ pub struct PiprConfig {
     pub finish_hook: Option<String>,
     pub cmdlist_always_show_preview: bool,
     pub paranoid_history_mode_default: bool,
+    /// The shell or other environment to run the commands in. Default: `["bash", "-c"]`
     pub eval_environment: Vec<String>,
     pub autoeval_mode_default: bool,
     pub cmd_timeout: Duration,

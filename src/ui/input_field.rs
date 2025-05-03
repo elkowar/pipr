@@ -16,12 +16,6 @@ use crate::ui::highlight_style_to_ratatui_style;
 use crate::ui::{make_default_block, truncate_with_ellipsis};
 
 /// Draw the input field for commands
-///
-/// # Arguments
-///
-/// * `f` - The frame to render to
-/// * `rect` - The area to render in
-/// * `app` - The application state
 pub fn draw_input_field(f: &mut Frame, rect: Rect, app: &mut App) {
     let mut highlighter = HighlightLines::new(*SH_SYNTAX, &THEME);
 

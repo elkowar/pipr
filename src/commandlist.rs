@@ -1,24 +1,41 @@
+//! [`CommandList`] is a list of stored commands that can be persisted to disk.
+//! This is used, amongst other things, to store bookmarks and the command history.
+
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::PathBuf;
 
 const SERIALIZATION_ENTRY_SEPERATOR: &str = "---";
 
+/// A command entry consisting of multiple lines of text.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct CommandEntry(Vec<String>);
 
 impl CommandEntry {
+    /// Creates a new command entry from lines of content.
     pub fn new(content: Vec<String>) -> CommandEntry {
         CommandEntry(content)
     }
+    /// Returns the lines in this entry.
     pub fn lines(&self) -> &Vec<String> {
         &self.0
     }
+    /// Converts the entry to a single string, joining lines with newlines.
     pub fn as_string(&self) -> String {
         self.lines().join("\n")
     }
 }
 
+/// A list of command entries that can be persisted to disk.
+/// 
+/// When serialized, entries are separated by "---" surrounded by newlines:
+/// ```text
+/// echo hello
+/// ---
+/// grep pattern file.txt
+/// ---
+/// ls -la
+/// ```
 #[derive(Debug, Clone)]
 pub struct CommandList {
     entries: Vec<CommandEntry>,
@@ -27,6 +44,7 @@ pub struct CommandList {
 }
 
 impl CommandList {
+    /// Creates a new command list with optional path and size limit.
     pub fn new(file: Option<PathBuf>, max_size: Option<usize>) -> CommandList {
         CommandList {
             entries: Vec::new(),
@@ -35,15 +53,18 @@ impl CommandList {
         }
     }
 
+    /// Returns all entries in the list.
     pub fn entries(&self) -> &Vec<CommandEntry> {
         &self.entries
     }
 
+    /// Replaces all entries and saves to disk.
     pub fn set_entries(&mut self, entries: Vec<CommandEntry>) {
         self.entries = entries;
         self.write_to_file();
     }
 
+    /// Adds a command entry if not empty or duplicate, respecting max size.
     pub fn push(&mut self, command: CommandEntry) {
         if !command.as_string().is_empty() && self.entries.last() != Some(&command) {
             self.entries.push(command);
@@ -55,21 +76,30 @@ impl CommandList {
             self.write_to_file();
         }
     }
+    /// Returns all entries as strings.
     pub fn as_strings(&self) -> Vec<String> {
-        self.entries.iter().map(|bookmark| bookmark.as_string()).collect()
+        self.entries.iter().map(|x| x.as_string()).collect()
     }
+
+    /// Returns the entry at the given index.
     pub fn get_at(&self, idx: usize) -> Option<&CommandEntry> {
         self.entries.get(idx)
     }
+
+    /// Returns the number of entries.
     pub fn len(&self) -> usize {
         self.entries.len()
     }
+
+    /// Removes the given entry if present.
     pub fn remove_entry(&mut self, entry: &CommandEntry) {
         if let Some(idx) = self.entries.iter().position(|e| e == entry) {
             self.entries.remove(idx);
         }
         self.write_to_file();
     }
+
+    /// Adds the entry if not present, or removes it if present.
     pub fn toggle_entry(&mut self, entry: CommandEntry) {
         if !entry.lines().is_empty() {
             if self.entries.contains(&entry) {
@@ -80,10 +110,12 @@ impl CommandList {
         }
     }
 
+    /// Serializes entries to a string with separators.
     pub fn serialize(&self) -> String {
         self.as_strings().join(&format!("\n{}\n", SERIALIZATION_ENTRY_SEPERATOR))
     }
 
+    /// Creates a [`CommandList`] from serialized string data.
     pub fn deserialize(path: Option<PathBuf>, max_size: Option<usize>, lines: &str) -> CommandList {
         let mut entries = CommandList::new(path, max_size);
         let mut current_entry = Vec::new();
@@ -96,7 +128,7 @@ impl CommandList {
             }
         }
         if !current_entry.is_empty() {
-            entries.push(CommandEntry::new(current_entry)); // add last started bookmark
+            entries.push(CommandEntry::new(current_entry)); // add last started entry
         }
 
         // remove entries to fit into max_size
@@ -108,6 +140,7 @@ impl CommandList {
         entries
     }
 
+    /// Writes entries to file if path is set.
     pub fn write_to_file(&self) {
         if let Some(file) = &self.file {
             let mut file = File::create(file).unwrap();
@@ -115,6 +148,7 @@ impl CommandList {
         }
     }
 
+    /// Loads a [`CommandList`] from a file or creates a new one if file doesn't exist.
     pub fn load_from_file(path: PathBuf, max_size: Option<usize>) -> CommandList {
         if let Some(mut file) = File::open(path.clone()).ok() {
             let mut contents = String::new();

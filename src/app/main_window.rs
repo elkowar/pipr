@@ -87,7 +87,7 @@ impl App {
         let command_result = self
             .execution_handler
             .execution_mode
-            .run_cmd_blocking(&self.execution_handler.eval_environment, &command_to_cache.join(" "));
+            .run_cmd_blocking(&self.execution_handler.shell_command, &command_to_cache.join(" "));
 
         if self.input_state.cursor_col < self.input_state.current_line().len() {
             match command_result {

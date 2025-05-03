@@ -1,3 +1,4 @@
+use anyhow::{bail, Context};
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
@@ -47,7 +48,7 @@ pub enum CmdOutput {
 
 pub struct CommandExecutionHandler {
     pub execution_mode: ExecutionMode,
-    pub eval_environment: Vec<String>,
+    pub shell_command: Vec<String>,
     pub cmd_out_receive: Receiver<CmdOutput>,
     cmd_in_send: Sender<CommandExecutionRequest>,
     stop_send: Sender<()>,
@@ -55,13 +56,17 @@ pub struct CommandExecutionHandler {
 
 impl CommandExecutionHandler {
     /// start a CommandExecutionHandler thread.
-    pub fn start(cmd_timeout: Duration, execution_mode: ExecutionMode, eval_environment: Vec<String>) -> Self {
+    ///
+    /// `cmd_timeout` is the maximum time a command is allowed to run before being killed.
+    /// `execution_mode` is the mode in which commands are executed (ISOLATED or UNSAFE).
+    /// `shell_command` is the shell (or other environment) that the command should be executed in. I.e.: `["bash", "-c"]`
+    pub fn start(cmd_timeout: Duration, execution_mode: ExecutionMode, shell_command: Vec<String>) -> Self {
         let (cmd_in_send, cmd_in_receive) = unbounded::<CommandExecutionRequest>();
         let (cmd_out_send, cmd_out_receive) = unbounded::<CmdOutput>();
         let (stop_send, stop_receive) = unbounded::<()>();
 
         let executor = Self {
-            eval_environment: eval_environment.clone(),
+            shell_command: shell_command.clone(),
             execution_mode,
             cmd_in_send,
             cmd_out_receive,
@@ -74,32 +79,30 @@ impl CommandExecutionHandler {
 
             loop {
                 // Check if we need to poll the current process
-                if let Some(child) = &mut current_child {
-                    if let Some((start_time, timeout_duration)) = current_timeout {
-                        if start_time.elapsed() > timeout_duration {
-                            // Command timed out
-                            let _ = child.kill();
-                            cmd_out_send.send(CmdOutput::NotOk("Command timed out".to_string())).unwrap();
-                            current_child = None;
-                            current_timeout = None;
-                        } else if let Ok(Some(status)) = child.try_wait() {
-                            // Process has completed
-                            let stdout = child.stdout.take().unwrap();
-                            let stderr = child.stderr.take().unwrap();
+                if let (Some(child), Some((start_time, timeout_duration))) = (&mut current_child, current_timeout) {
+                    if start_time.elapsed() > timeout_duration {
+                        // Command timed out
+                        let _ = child.kill();
+                        cmd_out_send.send(CmdOutput::NotOk("Command timed out".to_string())).unwrap();
+                        current_child = None;
+                        current_timeout = None;
+                    } else if let Ok(Some(status)) = child.try_wait() {
+                        // Process has completed
+                        let stdout = child.stdout.take().unwrap();
+                        let stderr = child.stderr.take().unwrap();
 
-                            let out_lines = read_lines_to_string(BufReader::new(stdout));
-                            let err_lines = read_lines_to_string(BufReader::new(stderr));
+                        let out_lines = read_lines_to_string(BufReader::new(stdout));
+                        let err_lines = read_lines_to_string(BufReader::new(stderr));
 
-                            let output = if status.success() {
-                                CmdOutput::Ok(out_lines)
-                            } else {
-                                CmdOutput::NotOk(err_lines)
-                            };
+                        let output = if status.success() {
+                            CmdOutput::Ok(out_lines)
+                        } else {
+                            CmdOutput::NotOk(err_lines)
+                        };
 
-                            cmd_out_send.send(output).unwrap();
-                            current_child = None;
-                            current_timeout = None;
-                        }
+                        cmd_out_send.send(output).unwrap();
+                        current_child = None;
+                        current_timeout = None;
                     }
                 }
 
@@ -107,7 +110,7 @@ impl CommandExecutionHandler {
                 crossbeam_channel::select! {
                     recv(cmd_in_receive) -> msg => {
                         if let Ok(new_cmd) = msg {
-                            match execution_mode.run_cmd_std(&eval_environment, &new_cmd.command) {
+                            match execution_mode.run_cmd_std(&shell_command, &new_cmd.command) {
                                 Ok(mut child) => {
                                     // Handle stdin if provided
                                     if let Some(stdin_content) = new_cmd.stdin {
@@ -121,7 +124,7 @@ impl CommandExecutionHandler {
                                     current_child = Some(child);
                                     current_timeout = Some((Instant::now(), cmd_timeout));
                                 }
-                                Err(err) => cmd_out_send.send(CmdOutput::NotOk(err)).unwrap(),
+                                Err(err) => cmd_out_send.send(CmdOutput::NotOk(err.to_string())).unwrap(),
                             }
                         }
                     },
@@ -150,21 +153,21 @@ fn is_unsafe_command(cmd: &str) -> bool {
 }
 
 impl ExecutionMode {
-    /// spawn a child process using this executionMode, returning Err if something went wrong while spawning.
+    /// spawn a child process using this ExecutionMode, returning Err if something went wrong while spawning.
     /// the command has stdout, stderr and stdin as `Stdio::piped()`, so all are available.
-    fn run_cmd_std(&self, eval_environment: &[String], cmd: &str) -> Result<Child, String> {
+    fn run_cmd_std(&self, shell_command: &[String], cmd: &str) -> anyhow::Result<Child> {
         let mut command = match self {
             ExecutionMode::ISOLATED => {
                 let mut command = Command::new("bwrap");
-                command.args(BUBBLEWRAP_ARGS).args(eval_environment.iter());
+                command.args(BUBBLEWRAP_ARGS).args(shell_command.iter());
                 command
             }
             ExecutionMode::UNSAFE => {
                 if is_unsafe_command(cmd) {
-                    return Err(UNSAFE_CMD_ERR.to_string());
+                    bail!(UNSAFE_CMD_ERR);
                 }
-                let mut eval_iter = eval_environment.iter();
-                let shell = eval_iter.next().expect("eval_environment is empty");
+                let mut eval_iter = shell_command.iter();
+                let shell = eval_iter.next().context("shell_command is empty")?;
                 let mut command = Command::new(shell);
                 command.args(eval_iter);
                 command
@@ -176,51 +179,25 @@ impl ExecutionMode {
             .stdin(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .map_err(|_| SPAWN_ERR.to_string())
+            .context(SPAWN_ERR)
     }
 
-    /// blockingly run a command using this executionmode, ignoring it's stderr.
+    /// blockingly run a command using this ExecutionMode, ignoring it's stderr.
     /// return's the stdout if everything went well, or an error message if there was a problem.
-    pub fn run_cmd_blocking(&self, eval_environment: &[String], cmd: &str) -> Result<Vec<String>, String> {
-        let mut command = match self {
-            ExecutionMode::ISOLATED => {
-                let mut command = Command::new("bwrap");
-                command.args(BUBBLEWRAP_ARGS).args(eval_environment.iter());
-                command
-            }
-            ExecutionMode::UNSAFE => {
-                if is_unsafe_command(cmd) {
-                    return Err(UNSAFE_CMD_ERR.to_string());
-                }
-                let mut eval_iter = eval_environment.iter();
-                let shell = eval_iter.next().expect("eval_environment is empty");
-
-                let mut command = Command::new(shell);
-                command.args(eval_iter);
-                command
-            }
-        };
-        let result = command
-            .arg(cmd)
-            .stdout(Stdio::piped())
-            .stdin(Stdio::null()) // stdin is unused
-            .stderr(Stdio::null()) // stderr is ignored
-            .spawn();
-
-        result
-            .and_then(|mut child| {
-                let stdout = BufReader::new(child.stdout.as_mut().unwrap()).lines().collect();
-                if child.wait()?.success() {
-                    stdout
-                } else {
-                    Err(std::io::Error::new(std::io::ErrorKind::Other, "Non-zero exit code"))
-                }
-            })
-            .map_err(|err| format!("{}", err))
+    pub fn run_cmd_blocking(&self, shell_command: &[String], cmd: &str) -> anyhow::Result<Vec<String>> {
+        let mut child = self.run_cmd_std(shell_command, cmd)?;
+        let stdout = BufReader::new(child.stdout.take().context("No child stdout available")?);
+        let lines: Vec<String> = stdout.lines().filter_map(Result::ok).collect();
+        let status = child.wait()?;
+        if status.success() {
+            Ok(lines)
+        } else {
+            bail!("Non-zero exit code: {}", status.code().unwrap_or(-1))
+        }
     }
 }
 
-/// Helper function to read lines from a reader into a string
+/// Read lines from a BufRead into a single string, ignoring all lines where reading failed.
 fn read_lines_to_string<R: BufRead>(reader: R) -> String {
     reader.lines().filter_map(Result::ok).collect::<Vec<String>>().join("\n") + "\n"
 }
