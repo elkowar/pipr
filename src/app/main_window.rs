@@ -1,5 +1,6 @@
 use crate::app::key_select_menu::KeySelectMenu;
 use crate::app::{App, CachedCommandPart, KeySelectMenuType};
+use crate::command_evaluation;
 use crate::lineeditor::{convert_keyevent_to_editorevent, EditorEvent};
 use crate::util::{StringExt, VecStringExt};
 use crate::CmdOutput;
@@ -84,10 +85,11 @@ impl App {
             command_to_cache.pop();
         }
 
-        let command_result = self
-            .execution_handler
-            .execution_mode
-            .run_cmd_blocking(&self.execution_handler.shell_command, &command_to_cache.join(" "));
+        let command_result = command_evaluation::execute_command_blocking(
+            &self.execution_handler.shell_command, 
+            &command_to_cache.join(" "),
+            self.execution_handler.execution_mode
+        );
 
         if self.input_state.cursor_col < self.input_state.current_line().len() {
             match command_result {
