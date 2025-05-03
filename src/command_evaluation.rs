@@ -1,5 +1,5 @@
 use anyhow::{bail, Context};
-use crossbeam_channel::{unbounded, Receiver, Sender};
+use crossbeam_channel::{unbounded, Receiver, RecvError, Sender};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
 use std::thread;
@@ -87,58 +87,30 @@ impl CommandExecutionHandler {
             let mut active_command: Option<(Child, Instant, Duration)> = None;
 
             loop {
-                if let Some((mut child, start_time, timeout)) = active_command.take() {
-                    // Check if command has timed out
-                    if start_time.elapsed() >= timeout {
-                        let _ = child.kill();
-                        cmd_out_send.send(CmdOutput::NotOk("Command timed out".to_string())).unwrap();
-                        active_command = None;
-                    } else {
-                        // Use wait_timeout to efficiently wait for process or timeout
-                        match child.try_wait() {
-                            Ok(Some(status)) => {
-                                // Process has completed
-                                let out_lines = read_lines_to_string(BufReader::new(child.stdout.take().unwrap()));
-                                let err_lines = read_lines_to_string(BufReader::new(child.stderr.take().unwrap()));
-                                let output = if status.success() {
-                                    CmdOutput::Ok(out_lines)
-                                } else {
-                                    CmdOutput::NotOk(err_lines)
-                                };
-                                cmd_out_send.send(output).unwrap();
-                            }
-                            Ok(None) => {
-                                // Process is still running, put it back
-                                active_command = Some((child, start_time, timeout));
-                            }
-                            Err(e) => {
-                                // Error checking status
-                                cmd_out_send
-                                    .send(CmdOutput::NotOk(format!("Error waiting for process: {}", e)))
-                                    .unwrap();
-                            }
-                        }
-                    }
+                enum Event {
+                    CommandExecutionRequest(Result<CommandExecutionRequest, RecvError>),
+                    StopReceived,
+                    RecheckCommandOutput,
                 }
 
                 // Wait for messages, with or without a timeout depending on whether we have an active command
                 let select_result = if active_command.is_some() {
                     // We have an active command - wait with timeout so we can check its status regularly
                     crossbeam_channel::select! {
-                        recv(cmd_in_receive) -> msg => Some(Either::Left(msg)),
-                        recv(stop_receive) -> _ => Some(Either::Right(())),
-                        default(Duration::from_millis(100)) => None // Just a timeout to check process status
+                        recv(cmd_in_receive) -> msg => Event::CommandExecutionRequest(msg),
+                        recv(stop_receive) -> _ => Event::StopReceived,
+                        default(Duration::from_millis(100)) => Event::RecheckCommandOutput // Just a timeout to check process status
                     }
                 } else {
                     // No active command - wait indefinitely for a new command or stop signal
                     crossbeam_channel::select! {
-                        recv(cmd_in_receive) -> msg => Some(Either::Left(msg)),
-                        recv(stop_receive) -> _ => Some(Either::Right(()))
+                        recv(cmd_in_receive) -> msg => Event::CommandExecutionRequest(msg),
+                        recv(stop_receive) -> _ => Event::StopReceived
                     }
                 };
 
                 match select_result {
-                    Some(Either::Left(Ok(new_cmd))) => {
+                    Event::CommandExecutionRequest(Ok(new_cmd)) => {
                         // Got a new command request
                         match spawn_command(&shell_command, &new_cmd.command, execution_mode) {
                             Ok(mut child) => {
@@ -157,11 +129,42 @@ impl CommandExecutionHandler {
                             Err(err) => cmd_out_send.send(CmdOutput::NotOk(err.to_string())).unwrap(),
                         }
                     }
-                    Some(Either::Right(())) => {
-                        // Stop signal received
-                        break;
+                    Event::StopReceived => break,
+                    Event::RecheckCommandOutput | Event::CommandExecutionRequest(Err(_)) => {
+                        if let Some((mut child, start_time, timeout)) = active_command.take() {
+                            // Check if command has timed out
+                            if start_time.elapsed() >= timeout {
+                                let _ = child.kill();
+                                cmd_out_send.send(CmdOutput::NotOk("Command timed out".to_string())).unwrap();
+                                active_command = None;
+                            } else {
+                                // Use wait_timeout to efficiently wait for process or timeout
+                                match child.try_wait() {
+                                    Ok(Some(status)) => {
+                                        // Process has completed
+                                        let out_lines = read_lines_to_string(BufReader::new(child.stdout.take().unwrap()));
+                                        let err_lines = read_lines_to_string(BufReader::new(child.stderr.take().unwrap()));
+                                        let output = if status.success() {
+                                            CmdOutput::Ok(out_lines)
+                                        } else {
+                                            CmdOutput::NotOk(err_lines)
+                                        };
+                                        cmd_out_send.send(output).unwrap();
+                                    }
+                                    Ok(None) => {
+                                        // Process is still running, put it back
+                                        active_command = Some((child, start_time, timeout));
+                                    }
+                                    Err(e) => {
+                                        // Error checking status
+                                        cmd_out_send
+                                            .send(CmdOutput::NotOk(format!("Error waiting for process: {}", e)))
+                                            .unwrap();
+                                    }
+                                }
+                            }
+                        }
                     }
-                    _ => {} // Timeout or error, continue loop to check command status
                 }
             }
         });
@@ -178,12 +181,6 @@ impl CommandExecutionHandler {
     pub fn stop(&mut self) {
         self.stop_send.send(()).unwrap();
     }
-}
-
-// Helper enum for select! pattern matching
-enum Either<L, R> {
-    Left(L),
-    Right(R),
 }
 
 /// Check if a command contains potentially unsafe operations
