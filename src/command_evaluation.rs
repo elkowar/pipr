@@ -95,14 +95,12 @@ impl CommandExecutionHandler {
 
                 // Wait for messages, with or without a timeout depending on whether we have an active command
                 let select_result = if active_command.is_some() {
-                    // We have an active command - wait with timeout so we can check its status regularly
                     crossbeam_channel::select! {
                         recv(cmd_in_receive) -> msg => Event::CommandExecutionRequest(msg),
                         recv(stop_receive) -> _ => Event::StopReceived,
-                        default(Duration::from_millis(100)) => Event::RecheckCommandOutput // Just a timeout to check process status
+                        default(Duration::from_millis(50)) => Event::RecheckCommandOutput // Just a timeout to check process status
                     }
                 } else {
-                    // No active command - wait indefinitely for a new command or stop signal
                     crossbeam_channel::select! {
                         recv(cmd_in_receive) -> msg => Event::CommandExecutionRequest(msg),
                         recv(stop_receive) -> _ => Event::StopReceived
@@ -138,7 +136,6 @@ impl CommandExecutionHandler {
                                 cmd_out_send.send(CmdOutput::NotOk("Command timed out".to_string())).unwrap();
                                 active_command = None;
                             } else {
-                                // Use wait_timeout to efficiently wait for process or timeout
                                 match child.try_wait() {
                                     Ok(Some(status)) => {
                                         // Process has completed
@@ -152,11 +149,9 @@ impl CommandExecutionHandler {
                                         cmd_out_send.send(output).unwrap();
                                     }
                                     Ok(None) => {
-                                        // Process is still running, put it back
                                         active_command = Some((child, start_time, timeout));
                                     }
                                     Err(e) => {
-                                        // Error checking status
                                         cmd_out_send
                                             .send(CmdOutput::NotOk(format!("Error waiting for process: {}", e)))
                                             .unwrap();
