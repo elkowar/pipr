@@ -8,13 +8,13 @@ use crossterm::{
 use input_field::draw_input_field;
 use outputs::draw_outputs;
 use ratatui::{
-    backend::Backend,
     style::{Color, Style},
     text::Span,
     widgets::{Block, Borders},
     Terminal,
 };
 use std::io::{self, Write};
+use ratatui::backend::CrosstermBackend;
 use syntect::{
     highlighting::{self, ThemeSet},
     parsing::{SyntaxReference, SyntaxSet},
@@ -36,7 +36,7 @@ lazy_static::lazy_static! {
 ///
 /// This is the main entry point for rendering the UI.
 /// It handles different window states and manages the terminal.
-pub fn draw_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> anyhow::Result<()> {
+pub fn draw_app<W: Write>(terminal: &mut Terminal<CrosstermBackend<W>>, app: &mut App) -> anyhow::Result<()> {
     // Handle command execution that jumps to other programs (like man pages)
     if let Some((stdin_content, mut should_jump_to_other_cmd)) = app.should_jump_to_other_cmd.take() {
         execute!(io::stdout(), LeaveAlternateScreen)?;
@@ -184,7 +184,7 @@ pub fn highlight_style_to_ratatui_style(style: &highlighting::Style) -> Style {
 }
 
 /// Creates a default styled block with a title
-pub fn make_default_block(title: &str, selected: bool) -> Block {
+pub fn make_default_block(title: &str, selected: bool) -> Block<'_> {
     let title_style = if selected {
         Style::default().fg(Color::Black).bg(Color::Cyan)
     } else {
