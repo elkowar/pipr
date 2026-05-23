@@ -1,0 +1,14 @@
+from pathlib import Path
+import subprocess
+
+@events.on_ptk_create
+def custom_keybindings(bindings, **kw):
+
+    @bindings.add('escape', 'a')
+    def pipr(event):
+        b = event.current_buffer
+        out_file = Path("/tmp/pipr_out")
+        subprocess.call(["pipr", "--out-file", out_file, "--default", b.document.text], stdout=subprocess.DEVNULL)
+        b.reset()
+        b.insert_text(out_file.read_text())
+        out_file.unlink()
